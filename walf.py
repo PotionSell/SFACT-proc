@@ -402,7 +402,7 @@ def callALFA(alfapath, z, specFile, outPath):
 
 fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
-#fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fp.ms.fits'
+##fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fp.ms.fits'
 runMultispec(fpath)
 
 
