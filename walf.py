@@ -53,7 +53,7 @@ def run1Dspec(specFile, objName):
     if not exists(imagepath):
         makedirs(imagepath)
     
-    
+    ##Prompt user to measure a line in splot to get a rough redshift for ALFA.
     #keep going until the user gets their desired good line measurement
     good = True
     dataDict = {}
@@ -99,11 +99,13 @@ def run1Dspec(specFile, objName):
         #...and get rid of them
         splotData = splotData.dropna(subset = ['center'])
         #get the most recent addition to the log file
-        obsW = splotData.iloc[-1][0]
+        userW = splotData.iloc[-1][0]
 
-        z = obsW / restW - 1.
-    
-    
+        z = userW / restW - 1.
+        
+        print('\nWavelength of measured line: ', userW)
+        print('Redshift of measured line: ', round(z,5), '\n')
+
         ##Call ALFA to fit the spectrum and lines.
         alfapath = '/home/bscousin/software/bin/alfa'
         callALFA(alfapath, z, specFile, outPath)
@@ -139,7 +141,8 @@ def run1Dspec(specFile, objName):
         
         ##Compute equivalent widths.
         
-        #get indices of lines, and find the average continuum around each
+        #get indices of lines in the spectrum vector, and find the average 
+        #continuum around each
         disp = 1.4076
         numFWHM = 2.5
         idx = np.empty(nLines, dtype=int)
@@ -160,8 +163,8 @@ def run1Dspec(specFile, objName):
             idxWindow = [idx[i]-idxRange, idx[i]+idxRange]
             
             contAvg[i] = np.mean( contF[ idxWindow[0] : idxWindow[1] ] )
-
-        eqWidth = np.array(peak / contAvg)
+#        import pdb; pdb.set_trace()
+        eqWidth = np.array(flux / contAvg)
 
 
         ##Create spectrum plot.
@@ -197,7 +200,8 @@ def run1Dspec(specFile, objName):
         plt.show()
 #        import pdb; pdb.set_trace()
 
-        print('Redshift of measured line: ', round(z,4))
+#        print('Wavelength of measured line: ', obsW)
+#        print('Redshift of measured line: ', round(z,5))
         
         #Check if user wants to redo the line selection and ALFA call.
         #if they redo, then break to the main loop and try again
@@ -314,9 +318,9 @@ def runMultispec(fpath):
 #        import pdb; pdb.set_trace()
         
         ##Start writing/processing, spectrum by spectrum:
-        f.write('ID\t\tredshift\tobservedW\tphysicalW\tflux\t\tuncertainty\tpeak\t\tfwhm\teqWidth\n')   
-        for i in range(nSpec):
-#        for i in range(33, nSpec):
+        f.write('ID\t\tredshift\tredshift2\t\tphysicalW\tflux\t\tuncertainty\tfwhm\teqWidth\n')
+#        for i in range(nSpec):
+        for i in range(42, 43):
             ##Run scopy to make a file for the current spectrum.
             objName = goodNames[i]
             curAp = int(goodNums[i])
@@ -336,18 +340,22 @@ def runMultispec(fpath):
             print('Writing line data for: ' +specFile+ '\n')
             nLines = len(data['observedWavelength'])
             for j in range(nLines):
+                z2 = data['observedWavelength']/data['physicalWavelength'] - 1.
                 f.write(objName                                                 \
-                        +'\t' +str(round(data['redshift'], 5))                  \
-                        +'\t\t'+ str(data['observedWavelength'][j])             \
+                        +'\t' +str(round(data['redshift'], 8))                  \
+                        +'\t' +str(round(z2[j], 8))                             \
+                        #+'\t\t'+ str(data['observedWavelength'][j])             \
                         +'\t\t'+ str(data['physicalWavelength'][j])             \
                         +'\t\t'+ str('%.2E' %data['lineFlux'][j])               \
                         +'\t'+ str('%.2E' %data['uncertainty'][j])              \
-                        +'\t'+ str('%.2E' %data['peak'][j])                     \
+                        #+'\t'+ str('%.2E' %data['peak'][j])                     \
                         +'\t'+ str(data['fwhm'][j])                             \
                         +'\t'+ str(np.round( data['equivalentWidth'][j], 2 ))   \
                         +'\n' 
                         )
         f.write('\n')
+    
+    import completion; completion.thanksForPlaying()
     
 #    #scrape up all the files written by ALFA
 #    allFiles = [f for f in listdir( join(datapath,savefolder) ) if f.endswith('.fits_fit') or f.endswith('.fits_lines')]
