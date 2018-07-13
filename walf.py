@@ -53,54 +53,13 @@ def run1Dspec(specFile, objName):
     if not exists(imagepath):
         makedirs(imagepath)
     
-    ##Prompt user to measure a line in splot to get a rough redshift for ALFA.
     #keep going until the user gets their desired good line measurement
     good = True
-    dataDict = {}
     while(good):
-        ##Obtain measurement of a single line to get spectrum's redshift.
-        
-        #run splot to let user measure 1 line
-        logFile = join(specPath, 'splot.log')
-        print('\n*****In the splot window, measure one line with a known rest ' \
-                'wavelength, then press q. If there are no lines, just press q.')
-        iraf.splot( images=specFile, save_file=logFile )
-
-        #prompt user for the known reference wavelength. Otherwise, skip.
-        while(True):
-            try:
-                #provide shortcuts for certain lines, using high precision
-                key = eval(input(
-                                '*****If you measured a line, enter:\n'             \
-                                '0 for no lines - skip this spectrum\n'             \
-                                '1 for H-alpha \n'                                  \
-                                '2 for OIII \n'                                     \
-                                '3 for OII \n'                                      \
-                                'the wavelength of another line\n'                  \
-                                ))
-                key = float(key)        #trigger a Name/ValueError if not a float
-            except (NameError, ValueError, SyntaxError):
-                print('Invalid input - please enter 0, 1, 2, 3, or a wavelength:\n')
-                continue
-                
-            if key == 0: return {}
-            elif key == 1: restW = 6562.82      #H-alpha
-            elif key == 2: restW = 5006.84      #OIII
-            elif key == 3: restW = 3727.53      #OII blend
-            else: restW = key
-            break
-
-
-        #read splot.log to get the wavelength measured by user in splot
-        cols = ['center','cont','flux','eqw','core','gfwhm','lfwhm']
-        splotData = pd.read_table( logFile, names=cols, keep_default_na=False, sep='\s+' )
-        #mark the invalid rows...
-        splotData = splotData.apply(pd.to_numeric, errors='coerce')
-        #...and get rid of them
-        splotData = splotData.dropna(subset = ['center'])
-        #get the most recent addition to the log file
-        userW = splotData.iloc[-1][0]
-
+    
+        userW, restW = promptLine(specFile, 'science')
+#        deltaW = abs(userW-restW)
+        if userW == '': return {}
         z = userW / restW - 1.
         
         print('\nWavelength of measured line: ', userW)
@@ -199,9 +158,6 @@ def run1Dspec(specFile, objName):
         plt.ion()
         plt.show()
 #        import pdb; pdb.set_trace()
-
-#        print('Wavelength of measured line: ', obsW)
-#        print('Redshift of measured line: ', round(z,5))
         
         #Check if user wants to redo the line selection and ALFA call.
         #if they redo, then break to the main loop and try again
@@ -244,7 +200,7 @@ def run1Dspec(specFile, objName):
     return dataDict
 
 
-def runMultispec(fpath):
+def runMultispec(fpath, skyFile=''):
     '''
     Identifies and measures the wavelengths, fluxes, and equivalent widths of 
     emission lines in a 2-dimensional set of spectra using Pyraf and ALFA.
@@ -272,6 +228,16 @@ def runMultispec(fpath):
     specPath = join(datapath, '1dspectra')
     if not exists(specPath):
         makedirs(specPath)
+    
+    #run sky line adjustments if desired
+    if skyFile != '':
+        print('\n*****Running a sky line correction. Displaying sky spectrum. ' \
+                'Follow the prompts and measure a sky line.')
+        userW, restW = promptLine(skyFile, 'sky')
+        deltaW = userW-restW
+        
+        print('Sky line shift: ', round(deltaW,6), 'Angstroms' )
+        #####apply whatever corrections this means#####
     
     ##Prepare to write to file. Each spectrum is processed and written with the 
     ##output file open, so processed data is still written even if the code 
@@ -320,7 +286,7 @@ def runMultispec(fpath):
         ##Start writing/processing, spectrum by spectrum:
         f.write('ID\t\tredshift\tredshift2\t\tphysicalW\tflux\t\tuncertainty\tfwhm\teqWidth\n')
 #        for i in range(nSpec):
-        for i in range(42, 43):
+        for i in range(42, 44):
             ##Run scopy to make a file for the current spectrum.
             objName = goodNames[i]
             curAp = int(goodNums[i])
@@ -341,6 +307,10 @@ def runMultispec(fpath):
             nLines = len(data['observedWavelength'])
             for j in range(nLines):
                 z2 = data['observedWavelength']/data['physicalWavelength'] - 1.
+                SNr = data['lineFlux']/data['uncertainty']
+                goodIdx = np.where(SNr >= 5)
+                bestZ = np.mean(z2[goodIdx])
+                import pdb; pdb.set_trace()
                 f.write(objName                                                 \
                         +'\t' +str(round(data['redshift'], 8))                  \
                         +'\t' +str(round(z2[j], 8))                             \
@@ -406,11 +376,112 @@ def callALFA(alfapath, z, specFile, outPath):
     process = subprocess.call(alfaCommand, shell=True, stdout=subprocess.PIPE)	#muted output
 
 
+def promptLine(specFile, specType):
+    '''
+    Helper function - prompts user to measure a line in splot and to provide the
+    identity of the measured line, finding both the rest and measured wavelengths.
+    
+    Provides shortcuts for certain lines, allowing for high precision for rest
+    wavelengths.
+    
+    Args:
+    specFile    absolute path to the spectrum file
+    specType    type of spectrum to be measured; either 'sky' or 'science'
+    
+    Returns:
+    restW       rest wavelength of one measured line in the spectrum
+    userW       user-measured wavelength of one line in the spectrum, or:
+    [empty]     only if user wants to skip line measuring (because e.g. the 
+                spectrum has no good lines)
+    '''
+    ##Obtain measurement of a single line to get spectrum's redshift.
+    #set up names and files
+    specPath, _ = split(specFile)
+    logFile = join(specPath, 'splot.log')
+    #run splot to let user measure 1 line
+    print('\n*****In the splot window, measure one line with a known rest ' \
+            'wavelength, then press q. If there are no lines, just press q.')
+    iraf.splot( images=specFile, save_file=logFile )
+
+    ##Prompt user for the identity of the measured line
+    while(True):    #continue until the user gives valid input
+        if specType == 'science':   #user is measuring actual emission lines
+            try:                    #ask for valid input
+                key = eval(input(
+                                '*****If you measured a line, enter:\n'         \
+                                '0 for no lines - skip this spectrum\n'         \
+                                '1 for H-alpha \n'                              \
+                                '2 for OIII \n'                                 \
+                                '3 for OII \n'                                  \
+                                'the wavelength of another line\n'              \
+                                ))
+                key = float(key)    #trigger a Name/ValueError if not a float
+            except (NameError, ValueError, SyntaxError):
+                print('Invalid input - please enter 0, 1, 2, 3, or a wavelength:\n')
+                continue
+            #set the wavelength based on input key
+            #it would be nice if Python had a switch-statement...
+            if key == 0: return ('','')         #user wants to skip
+            elif key == 1: restW = 6562.82      #H-alpha
+            elif key == 2: restW = 5006.84      #OIII
+            elif key == 3: restW = 3727.53      #OII blend
+            else: restW = key
+            break
+        
+        elif specType == 'sky':     #user is measuring sky emission lines
+            try:                    #ask for valid input
+                key = eval(input(
+                                '*****If you measured a line, enter:\n'         \
+                                '1 for Hg   4358\n'                             \
+                                '2 for Hg   5460\n'                             \
+                                '3 for O I  5577\n'                             \
+                                '4 for Na D 5891\n'                             \
+                                '5 for O I  6300\n'                             \
+                                '6 for O I  6363\n'                             \
+                                'the wavelength of another line\n'              \
+                                ))
+                key = float(key)    #trigger a Name/ValueError if not a float
+            except (NameError, ValueError, SyntaxError):
+                print('Invalid input - please enter a number key or a wavelength:\n')
+                continue
+            #set the wavelength based on input key
+            if key == 0: return ('','')
+            elif key == 1: restW = 4358.33      #Hg
+            elif key == 2: restW = 5460.74      #Hg
+            elif key == 3: restW = 5577.35      #OI
+            elif key == 4: restW = 5891.94      #Na D
+            elif key == 5: restW = 6300.23      #OI
+            elif key == 6: restW = 6363.88      #OI
+            else: restW = key
+            break
+    
+    #read the measured wavelength from the splot log file
+    entry = readSplotLog(logFile)
+    userW = entry[0]
+    return (userW, restW)
+
+
+def readSplotLog(logFile):
+    '''Helper function to read a splot log file, and extract the most recent entry'''
+    #read splot.log to get the wavelength measured by user in splot
+    cols = ['center','cont','flux','eqw','core','gfwhm','lfwhm']
+    splotData = pd.read_table( logFile, names=cols, keep_default_na=False, sep='\s+' )
+    #mark the invalid rows...
+    splotData = splotData.apply(pd.to_numeric, errors='coerce')
+    #...and get rid of them
+    splotData = splotData.dropna(subset = ['center'])
+    #get the most recent addition to the log file
+    recentRow = splotData.iloc[-1][:]
+    return recentRow
+
 
 
 fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
+skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
+#skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
+
 fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
 ##fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fp.ms.fits'
-runMultispec(fpath)
+runMultispec(fpath, skyFile)
 
 
