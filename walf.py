@@ -16,7 +16,7 @@ from io import StringIO
 from pyraf import iraf
 from time import sleep
 
-def run1Dspec(specFile, objName):
+def run1Dspec(specFile, objName, deltaW):
     '''
     Processes a 1-dimensional .fits spectrum using ALFA.
     
@@ -60,6 +60,9 @@ def run1Dspec(specFile, objName):
         userW, restW = promptLine(specFile, 'science')
 #        deltaW = abs(userW-restW)
         if userW == '': return {}
+        #adjust for sky line correction
+        userW = userW - deltaW
+        
         z = userW / restW - 1.
         
         print('\nWavelength of measured line: ', userW)
@@ -123,6 +126,7 @@ def run1Dspec(specFile, objName):
             
             contAvg[i] = np.mean( contF[ idxWindow[0] : idxWindow[1] ] )
 #        import pdb; pdb.set_trace()
+        print(contAvg)
         eqWidth = np.array(flux / contAvg)
 
 
@@ -144,9 +148,9 @@ def run1Dspec(specFile, objName):
             #data points. Shift is intelligently scaled to the axis size.
             xcorr = max(obsW)/-100.
             ycorr = max(peak+contAvg)/30.
-            ax.annotate(str(i), xy=(i+xcorr,j+ycorr))
-            ax.annotate('('+str(k)+')', xy=(i+xcorr,j+ycorr/2.75))
-
+            text = str(i) +'\n('+ str(k) +')'
+            ax.annotate(text, xy=(i+xcorr,j+ycorr))
+#        import pdb; pdb.set_trace()
         plt.title('Fitted lines for spectrum ' +specName+ '; object ID ' +objName, size=24)
         plt.xlim(min(specW-100), max(specW+100))
         plt.xlabel(r'wavelength ($\AA$)', size=20)
@@ -157,7 +161,6 @@ def run1Dspec(specFile, objName):
         print('The fitted spectrum has been saved in \'fittedspectra.\'\n')
         plt.ion()
         plt.show()
-#        import pdb; pdb.set_trace()
         
         #Check if user wants to redo the line selection and ALFA call.
         #if they redo, then break to the main loop and try again
@@ -229,7 +232,7 @@ def runMultispec(fpath, skyFile=''):
     if not exists(specPath):
         makedirs(specPath)
     
-    #run sky line adjustments if desired
+    #prepare for sky line adjustments if desired
     if skyFile != '':
         print('\n*****Running a sky line correction. Displaying sky spectrum. ' \
                 'Follow the prompts and measure a sky line.')
@@ -237,7 +240,7 @@ def runMultispec(fpath, skyFile=''):
         deltaW = userW-restW
         
         print('Sky line shift: ', round(deltaW,6), 'Angstroms' )
-        #####apply whatever corrections this means#####
+    else: deltaW = 0
     
     ##Prepare to write to file. Each spectrum is processed and written with the 
     ##output file open, so processed data is still written even if the code 
@@ -281,40 +284,58 @@ def runMultispec(fpath, skyFile=''):
         goodNames = apNames[apFlags]
         
         nSpec = len(goodNums)
-#        import pdb; pdb.set_trace()
         
         ##Start writing/processing, spectrum by spectrum:
-        f.write('ID\t\tredshift\tredshift2\t\tphysicalW\tflux\t\tuncertainty\tfwhm\teqWidth\n')
+        header = 'ID\t\tsplotZ\t\tlineZ\t\tbestZ\t\tstdZ\t\tobserveW\tphysicalW\t\tflux\t\tuncertainty\tfwhm\teqWidth\n'
+        f.write(header)
 #        for i in range(nSpec):
-        for i in range(42, 44):
+        for i in range(39, 49):
             ##Run scopy to make a file for the current spectrum.
             objName = goodNames[i]
             curAp = int(goodNums[i])
             pad_ap = format(curAp, '04d')
             specName = '1dspec.'+pad_ap+'.fits'
             specFile = join(specPath, specName)
-            
             iraf.scopy(input=fpath, output=join(specPath, '1dspec'), apertures=curAp)
             
-            ##Process the 1D spectrum
-            data = run1Dspec(specFile, objName)
-            
+            ##Process the 1D spectrum.
+            data = run1Dspec(specFile, objName, deltaW)
             #if user skipped the spectrum, data is empty, so continue to next spectrum
             if not data: continue
-                        
+            
+            ##Otherwise, prepare to write to file.
+            nLines = len(data['observedWavelength'])
+            
+            #apply sky line correction to observed wavelengths
+            data['observedWavelength'] = data['observedWavelength'] - deltaW
+            #derive individual line redshifts
+            lineZ = data['observedWavelength']/data['physicalWavelength'] - 1.
+#            lineZ = format(lineZ, '0.6d')
+            #compute an average redshift from data above a threshold SN ratio
+            
+            SNr = data['lineFlux']/data['uncertainty']
+            SNthres = 10.
+            goodIdx = np.where(SNr >= SNthres)
+            bestZ = np.mean(lineZ[goodIdx])
+            bestZstd = np.std(lineZ[goodIdx])
+            import math
+            #if no lines are above threshold, just use the line with highest SN
+            if math.isnan(bestZ):
+                bestIdx = np.argmax(SNr)
+                bestZ = lineZ[bestIdx]
+#                bestZstd = 0       #this will be NaN - which is better?################
+            
             ##Proceed with writing the output file.
             print('Writing line data for: ' +specFile+ '\n')
-            nLines = len(data['observedWavelength'])
             for j in range(nLines):
-                z2 = data['observedWavelength']/data['physicalWavelength'] - 1.
-                SNr = data['lineFlux']/data['uncertainty']
-                goodIdx = np.where(SNr >= 5)
-                bestZ = np.mean(z2[goodIdx])
                 import pdb; pdb.set_trace()
+                if bestZ[j]: pass
                 f.write(objName                                                 \
-                        +'\t' +str(round(data['redshift'], 8))                  \
-                        +'\t' +str(round(z2[j], 8))                             \
-                        #+'\t\t'+ str(data['observedWavelength'][j])             \
+                        +'\t' +str(round(data['redshift'], 6))                  \
+                        +'\t' +str(format(lineZ[j], '0.6f'))                    \
+                        +'\t' +str(round(bestZ, 6))                             \
+                        +'\t' +str(round(bestZstd, 6))                          \
+                        +'\t\t'+ str(data['observedWavelength'][j])             \
                         +'\t\t'+ str(data['physicalWavelength'][j])             \
                         +'\t\t'+ str('%.2E' %data['lineFlux'][j])               \
                         +'\t'+ str('%.2E' %data['uncertainty'][j])              \
@@ -359,10 +380,10 @@ def callALFA(alfapath, z, specFile, outPath):
     deepCat = ' optical_deepCustom2.cat '
     #set window size used during continuum fitting
     try:
-       winSize=eval(input('Enter the window size to be used for continuum fitting '\
-                    '(an odd # of pixels - leave empty for default 101 pixels)"\n'))
+       winSize=eval(input('Enter the window size to be used for continuum fitting, '\
+                    'or press enter for the default of 150 pixels"\n'))
     except SyntaxError:
-        winSize = 100
+        winSize = 150
 
     paramStr =  ' -ul  -n 0  -vg ' +str(v)+ ' -cw ' +str(winSize)+ \
                 ' -o ' +outPath+ ' -sc' +strongCat+ '-dc' +deepCat+ ' '
@@ -478,7 +499,7 @@ def readSplotLog(logFile):
 
 fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
-#skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
+skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
 
 fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
 ##fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fp.ms.fits'
