@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 from os.path import isfile, join, splitext, split, exists, sep
 from os import listdir, makedirs
-
+import math
 
 #packages for Pyraf support:
 import sys
@@ -189,13 +189,15 @@ def run1Dspec(specFile, objName, deltaW):
                 good = False      
                 ##set the return value to our data
                 dataDict = {
-                            'redshift': z, 'observedWavelength': np.array(obsW),\
+                            'observedWavelength': np.array(obsW),               \
+                            'splotRedshift': z,                                 \
                             'physicalWavelength': np.array(realW),              \
                             'lineFlux': np.array(flux),                         \
                             'uncertainty': np.array(uncertainty),               \
                             'peak': np.array(peak),                             \
+                            'equivalentWidth': eqWidth,                         \
+                            'continuumAvg': contAvg,                            \
                             'fwhm': np.array(fwhm),                             \
-                            'equivalentWidth': eqWidth
                             }
                 return dataDict
             #and then break to the main loop
@@ -242,54 +244,61 @@ def runMultispec(fpath, skyFile=''):
         print('Sky line shift: ', round(deltaW,6), 'Angstroms' )
     else: deltaW = 0
     
+    ##Access 2Dspectrum and begin processing.
+
+    #hacky workaround to get output printed by IRAF's imhead as a string
+    old_stdout = sys.stdout
+    sys.stdout = mystdout = StringIO()
+    iraf.imhead(fpath, longheader='yes')
+    sys.stdout = old_stdout
+
+    #access strings from stdout, and format as a numpy array
+    imheadStr = mystdout.getvalue()
+    imheadStr = imheadStr.split('\n')
+    imheadStr = np.array(imheadStr)
+
+    #find rows for APID and APNUM (yes, they're different rows)
+    apidx1 = np.where(['APID' in x for x in imheadStr])
+    apidx2 = np.where(['APNUM' in x for x in imheadStr])
+
+    apIDRows = imheadStr[apidx1]
+    apNumRows = imheadStr[apidx2]
+
+    #split of the different entries in the row...
+    apNumRowValues = [x.split('\'') for x in apNumRows]
+    #...and select the part of the row that contains the # and flag...
+    nums = [x[1] for x in apNumRowValues]
+    #...and select only the part containing the #...
+    apNums = np.array( [ x.split()[0] for x in nums ] )
+    #and the part containing the flag
+    apFlags = np.array( [ int( x.split()[1] ) for x in nums ], dtype=bool )
+    
+    #also extract object names/IDs
+    apIDRowValues = [x.split('\'') for x in apIDRows]
+    names = [x[1] for x in apIDRowValues]
+    apNames = np.array( [x.split()[0] for x in names] )
+    
+    goodNums = apNums[apFlags]
+    goodNames = apNames[apFlags]
+    
+    nSpec = len(goodNums)
+    
     ##Prepare to write to file. Each spectrum is processed and written with the 
     ##output file open, so processed data is still written even if the code 
     ##crashes/escapes. 
-    with open( join(datapath, fname)+'.txt', 'w+' ) as f:
-        ##Access 2Dspectrum and begin processing.
-
-        #hacky workaround to get output printed by IRAF's imhead as a string
-        old_stdout = sys.stdout
-        sys.stdout = mystdout = StringIO()
-        iraf.imhead(fpath, longheader='yes')
-        sys.stdout = old_stdout
-
-        #access strings from stdout, and format as a numpy array
-        imheadStr = mystdout.getvalue()
-        imheadStr = imheadStr.split('\n')
-        imheadStr = np.array(imheadStr)
-
-        #find rows for APID and APNUM (yes, they're different rows)
-        apidx1 = np.where(['APID' in x for x in imheadStr])
-        apidx2 = np.where(['APNUM' in x for x in imheadStr])
-
-        apIDRows = imheadStr[apidx1]
-        apNumRows = imheadStr[apidx2]
-
-        #split of the different entries in the row...
-        apNumRowValues = [x.split('\'') for x in apNumRows]
-        #...and select the part of the row that contains the # and flag...
-        nums = [x[1] for x in apNumRowValues]
-        #...and select only the part containing the #...
-        apNums = np.array( [ x.split()[0] for x in nums ] )
-        #and the part containing the flag
-        apFlags = np.array( [ int( x.split()[1] ) for x in nums ], dtype=bool )
-        
-        #also extract object names/IDs
-        apIDRowValues = [x.split('\'') for x in apIDRows]
-        names = [x[1] for x in apIDRowValues]
-        apNames = np.array( [x.split()[0] for x in names] )
-        
-        goodNums = apNums[apFlags]
-        goodNames = apNames[apFlags]
-        
-        nSpec = len(goodNums)
-        
+#    with open( join(datapath, fname)+'.txt', 'w+' ) as f:
+    outName1 = join(datapath, 'globalData.txt')
+    outName2 = join(datapath, 'lineData.txt')
+    with open(outName1, 'w+') as f1, open(outName2, 'w+') as f2:
         ##Start writing/processing, spectrum by spectrum:
-        header = 'ID\t\tsplotZ\t\tlineZ\t\tbestZ\t\tstdZ\t\tobserveW\tphysicalW\t\tflux\t\tuncertainty\tfwhm\teqWidth\n'
-        f.write(header)
+        header1 = 'objID\tsplotZ\t\talfaZ\t\tsigmaZ\t\tnLines\tbestLineID\n'
+        header2 = 'objID\tlineID\t\tobserveW\tphysicalW\tlineZ\t\tflux\t\tsigmaFlux\teqWidth\t\tcontAvg\t\tfwhm\n'
+        
+        f1.write(header1)
+        f2.write(header2)
+        
 #        for i in range(nSpec):
-        for i in range(39, 49):
+        for i in range(39, 40):
             ##Run scopy to make a file for the current spectrum.
             objName = goodNames[i]
             curAp = int(goodNums[i])
@@ -304,6 +313,8 @@ def runMultispec(fpath, skyFile=''):
             if not data: continue
             
             ##Otherwise, prepare to write to file.
+            
+            ##First, write global properties:
             nLines = len(data['observedWavelength'])
             
             #apply sky line correction to observed wavelengths
@@ -312,40 +323,49 @@ def runMultispec(fpath, skyFile=''):
             lineZ = data['observedWavelength']/data['physicalWavelength'] - 1.
 #            lineZ = format(lineZ, '0.6d')
             #compute an average redshift from data above a threshold SN ratio
-            
             SNr = data['lineFlux']/data['uncertainty']
-            SNthres = 10.
+            SNthres = 5.
             goodIdx = np.where(SNr >= SNthres)
             bestZ = np.mean(lineZ[goodIdx])
             bestZstd = np.std(lineZ[goodIdx])
-            import math
-            #if no lines are above threshold, just use the line with highest SN
-            if math.isnan(bestZ):
-                bestIdx = np.argmax(SNr)
-                bestZ = lineZ[bestIdx]
-#                bestZstd = 0       #this will be NaN - which is better?################
             
-            ##Proceed with writing the output file.
+            #identify the line with highest SN
+            strongestIdx = np.argmax(SNr)
+            lineIDs = data['physicalWavelength']        #placeholder for a true keyed-catalogue of lines
+            strongestID = lineIDs[strongestIdx]
+                        
+            #if no lines are above threshold, use the line with highest SN
+            if math.isnan(bestZ):
+                strongestZ = lineZ[strongestIdx]
+                bestZ = strongestZ
+#                bestZstd = 0       #this will be NaN - which is better?################
+            objName = objName.ljust(4)  #pad for output formatting purposes
             print('Writing line data for: ' +specFile+ '\n')
+            f1.write(objName                                                    \
+                    +'\t' +str(format(data['splotRedshift'], '0.6f'))           \
+                    +'\t' +str(format(bestZ, '0.6f'))                           \
+                    +'\t' +str(round(bestZstd, 6)).ljust(8)                     \
+                    +'\t' +str(nLines)                                        \
+                    +'\t\t' +str(strongestID)                                   \
+                    +'\n' 
+                    )
+            
+            ##Second, write line properties:
             for j in range(nLines):
-                import pdb; pdb.set_trace()
-                if bestZ[j]: pass
-                f.write(objName                                                 \
-                        +'\t' +str(round(data['redshift'], 6))                  \
+                f2.write(objName                                                \
+                        +'\t' +str(strongestID)                                 \
+                        +'\t\t'+ str(data['observedWavelength'][j]).ljust(8)    \
+                        +'\t'+ str(data['physicalWavelength'][j]).ljust(8)      \
                         +'\t' +str(format(lineZ[j], '0.6f'))                    \
-                        +'\t' +str(round(bestZ, 6))                             \
-                        +'\t' +str(round(bestZstd, 6))                          \
-                        +'\t\t'+ str(data['observedWavelength'][j])             \
-                        +'\t\t'+ str(data['physicalWavelength'][j])             \
-                        +'\t\t'+ str('%.2E' %data['lineFlux'][j])               \
+                        +'\t'+ str('%.2E' %data['lineFlux'][j])                 \
                         +'\t'+ str('%.2E' %data['uncertainty'][j])              \
                         #+'\t'+ str('%.2E' %data['peak'][j])                     \
+                        +'\t'+ str(format(data['equivalentWidth'][j], '4.2f'))  \
+                        +'\t\t'+ str(format(data['continuumAvg'][j], '0.2e'))     \
                         +'\t'+ str(data['fwhm'][j])                             \
-                        +'\t'+ str(np.round( data['equivalentWidth'][j], 2 ))   \
-                        +'\n' 
+                        +'\n'
                         )
-        f.write('\n')
-    
+#        import pdb; pdb.set_trace()
     import completion; completion.thanksForPlaying()
     
 #    #scrape up all the files written by ALFA
