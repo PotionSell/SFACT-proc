@@ -16,7 +16,7 @@ from io import StringIO
 from pyraf import iraf
 from time import sleep
 
-def run1Dspec(specFile, objName, deltaW):
+def run1Dspec(specFile, objID, deltaW):
     '''
     Processes a 1-dimensional .fits spectrum using ALFA.
     
@@ -84,21 +84,21 @@ def run1Dspec(specFile, objName, deltaW):
 
         #read in fitted-line data from ALFA
         linesFname = join(outPath, specName+'_lines')
-        mycols = ['obsW', 'realW', 'flux', 'uncertainty', 'peak', 'fwhm']
+        mycols = ['observeW', 'physW', 'flux', 'sigmaFlux', 'peak', 'fwhm']
         rawLines = pd.read_csv(linesFname, sep='\s+', names=mycols)
         #convert to dataframe of floats, ignoring strings
         rawLines = rawLines.apply(pd.to_numeric, errors='coerce')
         #find lines that are actual detections, not just upper limits
-        rowidx = np.where(~np.isnan(rawLines.uncertainty))
-        lineData = rawLines.iloc[rowidx]
+        rowidx = np.where(~np.isnan(rawLines.sigmaFlux))
+        goodLines = rawLines.iloc[rowidx]
 
-        nLines = np.shape(lineData)[0]
-        obsW = lineData['obsW']
-        realW = lineData['realW']
-        flux = lineData['flux']
-        uncertainty = lineData['uncertainty']
-        peak = lineData['peak']
-        fwhm = lineData['fwhm']
+        nLines = np.shape(goodLines)[0]
+        observeW = goodLines['observeW']
+        physW = goodLines['physW']
+        flux = goodLines['flux']
+        sigmaFlux = goodLines['sigmaFlux']
+        peak = goodLines['peak']
+        fwhm = goodLines['fwhm']
         
         
         ##Compute equivalent widths.
@@ -117,7 +117,7 @@ def run1Dspec(specFile, objName, deltaW):
             return idx
 
         for i in range(nLines):
-            idx[i] = firstIndex(specW, obsW.iloc[i], disp)
+            idx[i] = firstIndex(specW, observeW.iloc[i], disp)
             #idx is close (+-1) to the exact index - this is okay since we only use it for 
             #getting averages across a range of indices anyways
             
@@ -139,19 +139,19 @@ def run1Dspec(specFile, objName, deltaW):
         ax = plt.gca()
         ymin, ymax = ax.get_ybound()
         for i in range(nLines):
-            plt.axvline(x=obsW.iloc[i], c='lightgrey', ls='--')
+            plt.axvline(x=observeW.iloc[i], c='lightgrey', ls='--')
 
         #label peak line fluxes, individually with wavelength info
-        plt.plot(obsW, peak + contAvg, 'o', c='orchid', label='estimated line peak')
-        for i, j, k in zip(obsW, peak+contAvg, realW):
+        plt.plot(observeW, peak + contAvg, 'o', c='orchid', label='estimated line peak')
+        for i, j, k in zip(observeW, peak+contAvg, physW):
             #shift the labels a bit by a correction so they aren't on top of 
             #data points. Shift is intelligently scaled to the axis size.
-            xcorr = max(obsW)/-100.
+            xcorr = max(observeW)/-100.
             ycorr = max(peak+contAvg)/30.
             text = str(i) +'\n('+ str(k) +')'
             ax.annotate(text, xy=(i+xcorr,j+ycorr))
 #        import pdb; pdb.set_trace()
-        plt.title('Fitted lines for spectrum ' +specName+ '; object ID ' +objName, size=24)
+        plt.title('Fitted lines for spectrum ' +specName+ '; object ID ' +objID, size=24)
         plt.xlim(min(specW-100), max(specW+100))
         plt.xlabel(r'wavelength ($\AA$)', size=20)
         plt.ylabel(r'flux ($units$)', size=20)
@@ -165,7 +165,7 @@ def run1Dspec(specFile, objName, deltaW):
         #Check if user wants to redo the line selection and ALFA call.
         #if they redo, then break to the main loop and try again
         #if they skip, then break to the main loop and do not try again, returning empty
-        #if they keep, then break to the main loop and do not try again, returning data
+        #if they keep, then break to the main loop and do not try again
         while(True):     #loop until user gives valid input
             try: 
                 redo = eval(input(
@@ -181,28 +181,95 @@ def run1Dspec(specFile, objName, deltaW):
                 print('Invalid input - please enter 0, 1, or 2:\n')
                 continue
             elif redo == 0:
-                good = False
-                #set the return value to be empty
-                dataDict = {}
-                return dataDict
+                #return empty, ending the function
+                return pd.DataFrame(), pd.DataFrame()
+            elif redo == 1:
+                good = True
+                break
             elif redo == 2:
-                good = False      
-                ##set the return value to our data
-                dataDict = {
-                            'observedWavelength': np.array(obsW),               \
-                            'splotRedshift': z,                                 \
-                            'physicalWavelength': np.array(realW),              \
-                            'lineFlux': np.array(flux),                         \
-                            'uncertainty': np.array(uncertainty),               \
-                            'peak': np.array(peak),                             \
-                            'equivalentWidth': eqWidth,                         \
-                            'continuumAvg': contAvg,                            \
-                            'fwhm': np.array(fwhm),                             \
-                            }
-                return dataDict
-            #and then break to the main loop
-            break
-    return dataDict
+                good = False
+                break
+
+    #apply sky line correction to observed wavelengths
+    observeW = observeW - deltaW
+    #derive individual line redshifts
+    lineZ = observeW/physW - 1.
+    
+#            lineZ = format(lineZ, '0.6d')
+    #compute an average redshift from data above a threshold SN ratio
+    SNr = flux/sigmaFlux
+#    import pdb; pdb.set_trace()
+    SNthres = 5.
+    goodIdx = np.where(SNr >= SNthres)
+    bestZ = np.mean(lineZ.iloc[goodIdx])
+    bestZstd = np.std(lineZ.iloc[goodIdx])
+    
+    #identify the line with highest SN
+    strongestIdx = np.argmax(np.array(SNr))
+    lineIDs = np.array(physW)        #placeholder for a true keyed-catalogue of lines
+    strongestID = lineIDs[strongestIdx]
+                
+    #if no lines are above threshold, use the line with highest SN
+    if math.isnan(bestZ):
+        strongestZ = lineZ.iloc[strongestIdx]
+        bestZ = strongestZ
+    #objID = objID.ljust(4)  #pad for output formatting purposes
+    #######################
+    
+    nLines = len(observeW)
+    
+    floatFormatter= lambda x: format(x, '6.3E')
+    np.set_printoptions(formatter={'float': floatFormatter})
+    
+    
+    
+    objCols = ['objID','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestLineID']
+    import collections
+    objDict = collections.OrderedDict(
+                {'objID': [objID],
+                'splotZ': format(z, '0.6f'),
+                'alfaZ': format(bestZ, '0.6f'),
+                'sigmaZ': format(bestZstd, '0.2e'),
+                'nLines': nLines,
+                'bestLineID': strongestID,
+                })
+    objDF = pd.DataFrame(objDict, columns=objCols)
+    
+    lineCols = ['objID','lineID','observeW','physicalW','lineZ','flux','sigmaFlux','eqWidth','contAvg','fwhm']
+    lineIDs = np.array(physW)
+    #god-awful, clunky re-formatting since there's just no good way to do this with pandas or numpy
+    pd.options.mode.chained_assignment = None  # default='warn' - muting the following warnings
+    for i in range(nLines):
+        observeW.iloc[i] = format( np.array(observeW)[i], '0.3f')
+        lineZ.iloc[i] = format( np.array(lineZ)[i], '0.6f')
+        flux.iloc[i] = format( np.array(flux)[i], '0.3e')
+        sigmaFlux.iloc[i] = format( np.array(sigmaFlux)[i], '0.3e')
+        eqWidth[i] = format( np.array(eqWidth)[i], '0.3f')
+        contAvg[i] = format( np.array(contAvg)[i], '0.3e')
+        fwhm.iloc[i] = format( np.array(fwhm)[i], '0.3f')
+#    import pdb; pdb.set_trace()
+    lineDict = collections.OrderedDict(
+                {'objID': [objID]*nLines,
+                'lineID': lineIDs,
+                'observeW': np.array(observeW),
+                'physicalW': np.array(physW),
+                'lineZ': np.array(lineZ),
+#                'flux': format(np.array(flux), '0.2e'),
+                'flux': np.array(flux),
+#                'sigmaFlux': format(np.array(sigmaFlux), '0.2e'),
+                'sigmaFlux': np.array(sigmaFlux),
+#                'eqWidth': format(eqWidth, '0.2f'),
+#                'eqWidth': format(eqWidth, '0.2f'),
+                'eqWidth': eqWidth,
+#                'contAvg': format(contAvg, '0.2e'),
+                'contAvg': contAvg,
+                'fwhm': np.array(fwhm),
+                })
+                
+    lineDF = pd.DataFrame(lineDict, columns=lineCols)
+#    import pdb; pdb.set_trace()
+    return objDF, lineDF
+        #and then break to the main loop
 
 
 def runMultispec(fpath, skyFile=''):
@@ -286,21 +353,20 @@ def runMultispec(fpath, skyFile=''):
     ##Prepare to write to file. Each spectrum is processed and written with the 
     ##output file open, so processed data is still written even if the code 
     ##crashes/escapes. 
-#    with open( join(datapath, fname)+'.txt', 'w+' ) as f:
     outName1 = join(datapath, 'globalData.txt')
     outName2 = join(datapath, 'lineData.txt')
     with open(outName1, 'w+') as f1, open(outName2, 'w+') as f2:
         ##Start writing/processing, spectrum by spectrum:
-        header1 = 'objID\tsplotZ\t\talfaZ\t\tsigmaZ\t\tnLines\tbestLineID\n'
-        header2 = 'objID\tlineID\t\tobserveW\tphysicalW\tlineZ\t\tflux\t\tsigmaFlux\teqWidth\t\tcontAvg\t\tfwhm\n'
+#        header1 = 'objID\tsplotZ\t\talfaZ\t\tsigmaZ\t\tnLines\tbestLineID\n'
+#        header2 = 'objID\tlineID\t\tobserveW\tphysicalW\tlineZ\t\tflux\t\tsigmaFlux\teqWidth\t\tcontAvg\t\tfwhm\n'
         
-        f1.write(header1)
-        f2.write(header2)
+#        f1.write(header1)
+#        f2.write(header2)
         
 #        for i in range(nSpec):
         for i in range(39, 40):
             ##Run scopy to make a file for the current spectrum.
-            objName = goodNames[i]
+            objID = goodNames[i]
             curAp = int(goodNums[i])
             pad_ap = format(curAp, '04d')
             specName = '1dspec.'+pad_ap+'.fits'
@@ -308,40 +374,20 @@ def runMultispec(fpath, skyFile=''):
             iraf.scopy(input=fpath, output=join(specPath, '1dspec'), apertures=curAp)
             
             ##Process the 1D spectrum.
-            data = run1Dspec(specFile, objName, deltaW)
-            #if user skipped the spectrum, data is empty, so continue to next spectrum
-            if not data: continue
+#            data = run1Dspec(specFile, objID, deltaW)
+            objDF, lineDF = run1Dspec(specFile, objID, deltaW)
+            #if user skipped the spectrum, the DFs are empty, so continue to next spectrum
+            if objDF.empty: continue
             
             ##Otherwise, prepare to write to file.
             
             ##First, write global properties:
-            nLines = len(data['observedWavelength'])
             
-            #apply sky line correction to observed wavelengths
-            data['observedWavelength'] = data['observedWavelength'] - deltaW
-            #derive individual line redshifts
-            lineZ = data['observedWavelength']/data['physicalWavelength'] - 1.
-#            lineZ = format(lineZ, '0.6d')
-            #compute an average redshift from data above a threshold SN ratio
-            SNr = data['lineFlux']/data['uncertainty']
-            SNthres = 5.
-            goodIdx = np.where(SNr >= SNthres)
-            bestZ = np.mean(lineZ[goodIdx])
-            bestZstd = np.std(lineZ[goodIdx])
-            
-            #identify the line with highest SN
-            strongestIdx = np.argmax(SNr)
-            lineIDs = data['physicalWavelength']        #placeholder for a true keyed-catalogue of lines
-            strongestID = lineIDs[strongestIdx]
-                        
-            #if no lines are above threshold, use the line with highest SN
-            if math.isnan(bestZ):
-                strongestZ = lineZ[strongestIdx]
-                bestZ = strongestZ
-#                bestZstd = 0       #this will be NaN - which is better?################
-            objName = objName.ljust(4)  #pad for output formatting purposes
             print('Writing line data for: ' +specFile+ '\n')
-            f1.write(objName                                                    \
+            f1.write(objDF.to_csv(sep='\t', index=False))
+            f2.write(lineDF.to_csv(sep='\t', index=False))
+            '''
+            f1.write(objID                                                    \
                     +'\t' +str(format(data['splotRedshift'], '0.6f'))           \
                     +'\t' +str(format(bestZ, '0.6f'))                           \
                     +'\t' +str(round(bestZstd, 6)).ljust(8)                     \
@@ -352,20 +398,19 @@ def runMultispec(fpath, skyFile=''):
             
             ##Second, write line properties:
             for j in range(nLines):
-                f2.write(objName                                                \
+                f2.write(objID                                                \
                         +'\t' +str(strongestID)                                 \
                         +'\t\t'+ str(data['observedWavelength'][j]).ljust(8)    \
                         +'\t'+ str(data['physicalWavelength'][j]).ljust(8)      \
                         +'\t' +str(format(lineZ[j], '0.6f'))                    \
                         +'\t'+ str('%.2E' %data['lineFlux'][j])                 \
-                        +'\t'+ str('%.2E' %data['uncertainty'][j])              \
+                        +'\t'+ str('%.2E' %data['sigmaFlux'][j])              \
                         #+'\t'+ str('%.2E' %data['peak'][j])                     \
                         +'\t'+ str(format(data['equivalentWidth'][j], '4.2f'))  \
                         +'\t\t'+ str(format(data['continuumAvg'][j], '0.2e'))     \
                         +'\t'+ str(data['fwhm'][j])                             \
                         +'\n'
-                        )
-#        import pdb; pdb.set_trace()
+                        )'''
     import completion; completion.thanksForPlaying()
     
 #    #scrape up all the files written by ALFA
