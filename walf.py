@@ -1,20 +1,21 @@
 #!/usr/bin/python
 
 import subprocess
+import collections
+import math
+from os.path import isfile, join, splitext, split, exists, sep
+from os import listdir, makedirs
+from time import sleep
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from os.path import isfile, join, splitext, split, exists, sep
-from os import listdir, makedirs
-import math
-
 #packages for Pyraf support:
 import sys
 from io import StringIO
-#from pyraf.iraf import splot, imhead
 from pyraf import iraf
-from time import sleep
+
 
 def run1Dspec(specFile, objID, deltaW):
     '''
@@ -109,15 +110,17 @@ def run1Dspec(specFile, objID, deltaW):
         numFWHM = 2.5
         idx = np.empty(nLines, dtype=int)
         contAvg = np.empty(nLines, dtype=np.float64)    #flux values are very small, so need high precision!
-
-        def firstIndex(a, val, tol):
-            '''Gets the first index in a numpy array (a) that's within a 
-            tolerance (tol) of some value (val)'''
-            idx = (np.abs(a - val) <= tol).argmax()
-            return idx
+        
+        matchIdx = lambda a,val,tol : np.abs(a-val) <= tol
+#        def firstIndex(a, val, tol):
+#           '''Gets the first index in a numpy array (a) that's within a 
+#            tolerance (tol) of some value (val)'''
+#            idx = (np.abs(a - val) <= tol).argmax()
+#            return idx
 
         for i in range(nLines):
-            idx[i] = firstIndex(specW, observeW.iloc[i], disp)
+            idx[i] = matchIdx(specW, observeW.iloc[i], disp).argmax()
+#            idx[i] = firstIndex(specW, observeW.iloc[i], disp)
             #idx is close (+-1) to the exact index - this is okay since we only use it for 
             #getting averages across a range of indices anyways
             
@@ -125,7 +128,6 @@ def run1Dspec(specFile, objID, deltaW):
             idxWindow = [idx[i]-idxRange, idx[i]+idxRange]
             
             contAvg[i] = np.mean( contF[ idxWindow[0] : idxWindow[1] ] )
-#        import pdb; pdb.set_trace()
         print(contAvg)
         eqWidth = np.array(flux / contAvg)
 
@@ -190,41 +192,48 @@ def run1Dspec(specFile, objID, deltaW):
                 good = False
                 break
 
+    ##Prepare output.
+    nLines = len(observeW)
     #apply sky line correction to observed wavelengths
     observeW = observeW - deltaW
     #derive individual line redshifts
     lineZ = observeW/physW - 1.
     
-#            lineZ = format(lineZ, '0.6d')
     #compute an average redshift from data above a threshold SN ratio
     SNr = flux/sigmaFlux
-#    import pdb; pdb.set_trace()
     SNthres = 5.
     goodIdx = np.where(SNr >= SNthres)
     bestZ = np.mean(lineZ.iloc[goodIdx])
     bestZstd = np.std(lineZ.iloc[goodIdx])
     
+    #assign line IDs
+    lineIDs = physW.round(0)
+    lineIDs = lineIDs.astype(int)
+    
     #identify the line with highest SN
     strongestIdx = np.argmax(np.array(SNr))
-    lineIDs = np.array(physW)        #placeholder for a true keyed-catalogue of lines
-    strongestID = lineIDs[strongestIdx]
+    strongestID = lineIDs.iloc[strongestIdx]
                 
     #if no lines are above threshold, use the line with highest SN
     if math.isnan(bestZ):
         strongestZ = lineZ.iloc[strongestIdx]
         bestZ = strongestZ
     #objID = objID.ljust(4)  #pad for output formatting purposes
-    #######################
+    #floatFormatter= lambda x: format(x, '6.3E')
+    #np.set_printoptions(formatter={'float': floatFormatter})
     
-    nLines = len(observeW)
+#    lineIDtables = np.array(physW)
+
+    '''
+    lineTable = pd.read_csv('lines.csv',sep='\t',index_col=False)
+    tableW = lineTable['restW']
+    tableID = lineTable['ID']
+    lineIDidx = np.where(
     
-    floatFormatter= lambda x: format(x, '6.3E')
-    np.set_printoptions(formatter={'float': floatFormatter})
     
-    
+    '''
     
     objCols = ['objID','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestLineID']
-    import collections
     objDict = collections.OrderedDict(
                 {'objID': [objID],
                 'splotZ': format(z, '0.6f'),
@@ -236,9 +245,9 @@ def run1Dspec(specFile, objID, deltaW):
     objDF = pd.DataFrame(objDict, columns=objCols)
     
     lineCols = ['objID','lineID','observeW','physicalW','lineZ','flux','sigmaFlux','eqWidth','contAvg','fwhm']
-    lineIDs = np.array(physW)
+    
     #god-awful, clunky re-formatting since there's just no good way to do this with pandas or numpy
-    pd.options.mode.chained_assignment = None  # default='warn' - muting the following warnings
+    pd.options.mode.chained_assignment = None  # default='warn' - to mute the following warnings
     for i in range(nLines):
         observeW.iloc[i] = format( np.array(observeW)[i], '0.3f')
         lineZ.iloc[i] = format( np.array(lineZ)[i], '0.6f')
@@ -247,29 +256,22 @@ def run1Dspec(specFile, objID, deltaW):
         eqWidth[i] = format( np.array(eqWidth)[i], '0.3f')
         contAvg[i] = format( np.array(contAvg)[i], '0.3e')
         fwhm.iloc[i] = format( np.array(fwhm)[i], '0.3f')
-#    import pdb; pdb.set_trace()
+        
     lineDict = collections.OrderedDict(
                 {'objID': [objID]*nLines,
                 'lineID': lineIDs,
                 'observeW': np.array(observeW),
                 'physicalW': np.array(physW),
                 'lineZ': np.array(lineZ),
-#                'flux': format(np.array(flux), '0.2e'),
                 'flux': np.array(flux),
-#                'sigmaFlux': format(np.array(sigmaFlux), '0.2e'),
                 'sigmaFlux': np.array(sigmaFlux),
-#                'eqWidth': format(eqWidth, '0.2f'),
-#                'eqWidth': format(eqWidth, '0.2f'),
                 'eqWidth': eqWidth,
-#                'contAvg': format(contAvg, '0.2e'),
                 'contAvg': contAvg,
                 'fwhm': np.array(fwhm),
                 })
                 
     lineDF = pd.DataFrame(lineDict, columns=lineCols)
-#    import pdb; pdb.set_trace()
     return objDF, lineDF
-        #and then break to the main loop
 
 
 def runMultispec(fpath, skyFile=''):
@@ -355,62 +357,38 @@ def runMultispec(fpath, skyFile=''):
     ##crashes/escapes. 
     outName1 = join(datapath, 'globalData.txt')
     outName2 = join(datapath, 'lineData.txt')
-    with open(outName1, 'w+') as f1, open(outName2, 'w+') as f2:
-        ##Start writing/processing, spectrum by spectrum:
-#        header1 = 'objID\tsplotZ\t\talfaZ\t\tsigmaZ\t\tnLines\tbestLineID\n'
-#        header2 = 'objID\tlineID\t\tobserveW\tphysicalW\tlineZ\t\tflux\t\tsigmaFlux\teqWidth\t\tcontAvg\t\tfwhm\n'
+    
+    
+    objDF = pd.DataFrame()
+    lineDF = pd.DataFrame()
+#    for i in range(nSpec):
+    for i in range(39, 41):
+    
+        ##Run scopy to make a file for the current spectrum.
+        objID = goodNames[i]
+        curAp = int(goodNums[i])
+        pad_ap = format(curAp, '04d')
+        specName = '1dspec.'+pad_ap+'.fits'
+        specFile = join(specPath, specName)
+        iraf.scopy(input=fpath, output=join(specPath, '1dspec'), apertures=curAp)
         
-#        f1.write(header1)
-#        f2.write(header2)
-        
-#        for i in range(nSpec):
-        for i in range(39, 40):
-            ##Run scopy to make a file for the current spectrum.
-            objID = goodNames[i]
-            curAp = int(goodNums[i])
-            pad_ap = format(curAp, '04d')
-            specName = '1dspec.'+pad_ap+'.fits'
-            specFile = join(specPath, specName)
-            iraf.scopy(input=fpath, output=join(specPath, '1dspec'), apertures=curAp)
-            
-            ##Process the 1D spectrum.
-#            data = run1Dspec(specFile, objID, deltaW)
-            objDF, lineDF = run1Dspec(specFile, objID, deltaW)
+        ##Process the 1D spectrum.
+        try:
+            cur_objDF, cur_lineDF = run1Dspec(specFile, objID, deltaW)
             #if user skipped the spectrum, the DFs are empty, so continue to next spectrum
-            if objDF.empty: continue
-            
-            ##Otherwise, prepare to write to file.
-            
-            ##First, write global properties:
+            if cur_objDF.empty: continue
+        
+            objDF = objDF.append(cur_objDF)
+            lineDF = lineDF.append(cur_lineDF)
             
             print('Writing line data for: ' +specFile+ '\n')
-            f1.write(objDF.to_csv(sep='\t', index=False))
-            f2.write(lineDF.to_csv(sep='\t', index=False))
-            '''
-            f1.write(objID                                                    \
-                    +'\t' +str(format(data['splotRedshift'], '0.6f'))           \
-                    +'\t' +str(format(bestZ, '0.6f'))                           \
-                    +'\t' +str(round(bestZstd, 6)).ljust(8)                     \
-                    +'\t' +str(nLines)                                        \
-                    +'\t\t' +str(strongestID)                                   \
-                    +'\n' 
-                    )
+            objDF.to_csv(outName1, sep='\t', index=False)
+            lineDF.to_csv(outName2, sep='\t', index=False)
+        except:
+            print('Writing line data for: ' +specFile+ '\n')
+            objDF.to_csv(outName1, sep='\t', index=False)
+            lineDF.to_csv(outName2, sep='\t', index=False)
             
-            ##Second, write line properties:
-            for j in range(nLines):
-                f2.write(objID                                                \
-                        +'\t' +str(strongestID)                                 \
-                        +'\t\t'+ str(data['observedWavelength'][j]).ljust(8)    \
-                        +'\t'+ str(data['physicalWavelength'][j]).ljust(8)      \
-                        +'\t' +str(format(lineZ[j], '0.6f'))                    \
-                        +'\t'+ str('%.2E' %data['lineFlux'][j])                 \
-                        +'\t'+ str('%.2E' %data['sigmaFlux'][j])              \
-                        #+'\t'+ str('%.2E' %data['peak'][j])                     \
-                        +'\t'+ str(format(data['equivalentWidth'][j], '4.2f'))  \
-                        +'\t\t'+ str(format(data['continuumAvg'][j], '0.2e'))     \
-                        +'\t'+ str(data['fwhm'][j])                             \
-                        +'\n'
-                        )'''
     import completion; completion.thanksForPlaying()
     
 #    #scrape up all the files written by ALFA
