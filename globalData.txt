@@ -1,0 +1,4 @@
+objID	splotZ	alfaZ	sigmaZ	nLines	bestLineID	redCoeff	OIII/Hb	OII/Hb	NII/Ha	SII/Ha	NeIII/Hb	NeIII/OII
+1257	0.393692	0.393724	8.52e-05	6	5007							
+217	0.392506	0.392513	5.30e-05	7	5007							
+5219	0.870814	0.870635	3.21e-07	3	3729							

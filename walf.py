@@ -233,7 +233,8 @@ def run1Dspec(specFile, objID, deltaW):
     
     '''
     
-    objCols = ['objID','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestLineID']
+    objCols = ['objID','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestLineID', 'redCoeff',
+             'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
     objDict = collections.OrderedDict(
                 {'objID': [objID],
                 'splotZ': format(z, '0.6f'),
@@ -241,6 +242,13 @@ def run1Dspec(specFile, objID, deltaW):
                 'sigmaZ': format(bestZstd, '0.2e'),
                 'nLines': nLines,
                 'bestLineID': strongestID,
+                'redCoeff': np.nan,
+                'OIII/Hb': np.nan,
+                'OII/Hb': np.nan,
+                'NII/Ha': np.nan,
+                'SII/Ha': np.nan,
+                'NeIII/Hb': np.nan,
+                'NeIII/OII': np.nan,
                 })
     objDF = pd.DataFrame(objDict, columns=objCols)
     
@@ -271,6 +279,10 @@ def run1Dspec(specFile, objID, deltaW):
                 })
                 
     lineDF = pd.DataFrame(lineDict, columns=lineCols)
+    
+#    import pdb; pdb.set_trace()
+    
+    
     return objDF, lineDF
 
 
@@ -361,19 +373,22 @@ def runMultispec(fpath, skyFile=''):
     
     objDF = pd.DataFrame()
     lineDF = pd.DataFrame()
-#    for i in range(nSpec):
-    for i in range(39, 41):
     
-        ##Run scopy to make a file for the current spectrum.
-        objID = goodNames[i]
-        curAp = int(goodNums[i])
-        pad_ap = format(curAp, '04d')
-        specName = '1dspec.'+pad_ap+'.fits'
-        specFile = join(specPath, specName)
-        iraf.scopy(input=fpath, output=join(specPath, '1dspec'), apertures=curAp)
+    #ensure that data is still written despite errors
+    with open(outName1, 'w+') as f1, open(outName2, 'w+') as f2:
+        start = True
+    #    for i in range(nSpec):
+        for i in range(39, 42):
         
-        ##Process the 1D spectrum.
-        try:
+            ##Run scopy to make a file for the current spectrum.
+            objID = goodNames[i]
+            curAp = int(goodNums[i])
+            pad_ap = format(curAp, '04d')
+            specName = '1dspec.'+pad_ap+'.fits'
+            specFile = join(specPath, specName)
+            iraf.scopy(input=fpath, output=join(specPath, '1dspec'), apertures=curAp)
+            
+            ##Process the 1D spectrum.
             cur_objDF, cur_lineDF = run1Dspec(specFile, objID, deltaW)
             #if user skipped the spectrum, the DFs are empty, so continue to next spectrum
             if cur_objDF.empty: continue
@@ -382,17 +397,23 @@ def runMultispec(fpath, skyFile=''):
             lineDF = lineDF.append(cur_lineDF)
             
             print('Writing line data for: ' +specFile+ '\n')
-            objDF.to_csv(outName1, sep='\t', index=False)
-            lineDF.to_csv(outName2, sep='\t', index=False)
-        except:
-            print('Writing line data for: ' +specFile+ '\n')
-            objDF.to_csv(outName1, sep='\t', index=False)
-            lineDF.to_csv(outName2, sep='\t', index=False)
-            
+            if start:      #start of the file, so write headers
+                f1.write( cur_objDF.to_csv(sep='\t', index=False) )
+                f2.write( cur_lineDF.to_csv(sep='\t', index=False) )
+                start = False
+            else:
+                f1.write( cur_objDF.to_csv(sep='\t', index=False, header=False) )
+                f2.write( cur_lineDF.to_csv(sep='\t', index=False, header=False) )
+    
+#        print('Writing line data for: ' +specFile+ '\n')
+#        objDF.to_csv(outName1, sep='\t', index=False)
+#        lineDF.to_csv(outName2, sep='\t', index=False)
+    
     import completion; completion.thanksForPlaying()
     
 #    #scrape up all the files written by ALFA
 #    allFiles = [f for f in listdir( join(datapath,savefolder) ) if f.endswith('.fits_fit') or f.endswith('.fits_lines')]
+
 
 
 def run1Dfrom2D(fpath, apNum):
