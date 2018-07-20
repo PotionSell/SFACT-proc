@@ -60,7 +60,7 @@ def run1Dspec(specFile, objID, deltaW):
     
         userW, restW = promptLine(specFile, 'science')
 #        deltaW = abs(userW-restW)
-        if userW == '': return {}
+        if userW == '': return pd.DataFrame(), pd.DataFrame()
         #adjust for sky line correction
         userW = userW - deltaW
         
@@ -134,7 +134,7 @@ def run1Dspec(specFile, objID, deltaW):
 
         ##Create spectrum plot.
         
-        plt.figure(figsize=(18,12))
+        fig = plt.figure(figsize=(18,12))
         plt.plot(specW, specF, c='grey', label='original spectrum')
         plt.plot(specW, contF, c='black', ls='--', label='continuum fit')
 
@@ -161,6 +161,8 @@ def run1Dspec(specFile, objID, deltaW):
         
         plt.savefig( join(imagepath, specName+'.png') )
         print('The fitted spectrum has been saved in \'fittedspectra.\'\n')
+        
+        import pickle; pickle.dump(fig, open( join(imagepath,specName+'.pickle'), 'wb'))
         plt.ion()
         plt.show()
         
@@ -377,8 +379,8 @@ def runMultispec(fpath, skyFile=''):
     #ensure that data is still written despite errors
     with open(outName1, 'w+') as f1, open(outName2, 'w+') as f2:
         start = True
-    #    for i in range(nSpec):
-        for i in range(39, 42):
+        for i in range(nSpec):
+#        for i in range(39, 42):
         
             ##Run scopy to make a file for the current spectrum.
             objID = goodNames[i]

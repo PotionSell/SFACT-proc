@@ -31,3 +31,7 @@ lineDF = pd.read_csv('lineData.txt', sep='\t', index_col=0)
 
 objDF.to_csv('globalData.txt',sep='\t', index=True) #good!!!
 lineDF.to_csv('lineData.txt',sep='\t', index=True)
+
+import pickle
+pickle.dump(fig, open(figname, 'wb'))
+pickle.load(open(figname, 'rb'))

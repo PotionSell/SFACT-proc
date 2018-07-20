@@ -1,10 +1,13 @@
+import pandas as pd
+import numpy as np
+
 def reddeningCoeff(objDF, lineDF):
     pass
 
     '''
     intrRatio   ratio between the intrinsic flux of the chosen line and 
                 reference Hbeta line
-    curveDiff    difference in reddening curve flux between the wavelengths of 
+    curveDiffBB    difference in reddening curve flux between the wavelengths of 
                 the chosen line and reference Hbeta line
     '''
 
@@ -18,42 +21,58 @@ Hgamma = 4340
 #load table of line IDs for later use
 lineID_DF = pd.read_csv('lines.csv', sep='\t')
 #reddening correction formula
-reddeningCorr = lambda obsRatio, intrRatio, curveDiff: -np.log10(obsRatio/intrRatio) / curveDiff
+reddeningCorr = lambda obsRatio, intrRatio, curveDiffB: -np.log10(obsRatio/intrRatio) / curveDiffB
 
 
 objIDs = objDF.index
 
 
-def findLineFlux(objLines, line):
+def findLineFlux(line):
     idx = np.where( objLines['lineID'].values == line)
     return float( objLines['flux'].iloc[idx] )
 
+def findLineCurveDiff(line):
+    ID_idx = np.where( lineID_DF['ID'].values == line)
+    curLine = lineID_DF.iloc[ID_idx]
+    return float(curLine['redCurve'])
+
+def computeRatio(line1,line2):
+    line1Flux = findLineFlux(line1)
+    line2Flux = findLineFlux(line2)
+    obsRatio = line2Flux / line1Flux
+    
+    curveDiffB1 = findLineCurveDiff(line1)
+    curveDiffB2 = findLineCurveDiff(line2)
+    
+    corrRatio = obsRatio * 10**(redCoeff * (curveDiffB2-curveDiffB1) )
+    return corrRatio
 
 for i in objIDs:
+    #skip if the object has only 1 line (which triggers errors if I don't skip it)
+    if objDF.loc[i]['nLines'] == 1: continue
+    
     #look at only the current object's lines
     objLines = lineDF.loc[i]
     #Halpha detected
     if Halpha in objLines['lineID'].values and Hbeta in objLines['lineID'].values:
         line = Halpha
-        obsFlux = findLineFlux(objLines, line)
+        obsFlux = findLineFlux(line)
         intrRatio = 2.86        #Halpha:Hbeta
             
     #OIII detected
     elif Hgamma in objLines['lineID'].values and Hbeta in objLines['lineID'].values:
         line = Hgamma
-        obsFlux = findLineFlux(objLines, line)
+        obsFlux = findLineFlux(line)
         intrRatio = 0.47        #Hgamma:Hbeta
     else: continue #cry me a river
 
     #look up values in line ID table
-    ID_idx = np.where( lineID_DF['ID'].values == line)
-    curLine = lineID_DF.iloc[ID_idx]
-    curveDiff = float(curLine['redCurve'])
+    curveDiffB = findLineCurveDiff(line)
 
-    HbetaFlux = findLineFlux(objLines, Hbeta)
+    HbetaFlux = findLineFlux(Hbeta)
     obsRatio = float(obsFlux / HbetaFlux)
 
-    redCoeff = reddeningCorr(obsRatio, intrRatio, curveDiff)
+    redCoeff = reddeningCorr(obsRatio, intrRatio, curveDiffB)
 
     objDF.loc[i, 'redCoeff'] = redCoeff
 
@@ -66,42 +85,41 @@ for i in objIDs:
     SII = 4072
     OIII = 5007
     OII = 3727      #this is blended - need  to account for the rough flux!!
-    NeIII = 3970
+    NeIII = 3869
     if Halpha in objLines['lineID'].values:
-        HalphaFlux = findLineFlux(objLines, Halpha)
+        line1 = Halpha
         if NII in objLines['lineID'].values:
-            line = NII
-            obsFlux = findLineFlux(objLines, line)
-            objDF.loc[i, 'NII/Ha'] = obsFlux/HalphaFlux
+            line2 = NII
+            corrRatio = computeRatio(line1,line2)
+            objDF.loc[i, 'NII/Ha'] = corrRatio
             
         if SII in objLines['lineID'].values:
-            line = SII
-            obsFlux = findLineFlux(objLines, line)
-            objDF.loc[i, 'SII/Ha'] = obsFlux/HalphaFlux
+            line2 = SII
+            corrRatio = computeRatio(line1,line2)
+            objDF.loc[i, 'SII/Ha'] = corrRatio
             
     if Hbeta in objLines['lineID'].values:
-        HbetaFlux = findLineFlux(objLines, Hbeta)
+        line1 = Hbeta
         if OIII in objLines['lineID'].values:
-            line = OIII
-            obsFlux = findLineFlux(objLines, line)
-            objDF.loc[i, 'OIII/Hb'] = obsFlux/HbetaFlux
+            line2 = OIII
+            corrRatio = computeRatio(line1,line2)
+            objDF.loc[i, 'OIII/Hb'] = corrRatio
             
         if OII in objLines['lineID'].values:
-            line = OII
-            obsFlux = findLineFlux(objLines, line)
-            objDF.loc[i, 'OII/Hb'] = obsFlux/HbetaFlux
-            
+            line2 = OII
+            corrRatio = computeRatio(line1,line2)
+            objDF.loc[i, 'OII/Hb'] = corrRatio
+                        
         if NeIII in objLines['lineID'].values:
-            line = NeIII
-            obsFlux = findLineFlux(objLines, line)
-            objDF.loc[i, 'NeIII/Hb'] = obsFlux/HbetaFlux
+            line2 = NeIII
+            corrRatio = computeRatio(line1,line2)
+            objDF.loc[i, 'NeIII/Hb'] = corrRatio
     
-    if NeIII in objLines['lineID'].values and OII in objLines['lineID'].values:
-        line = NeIII
-        obsFlux1 = findLineFlux(objLines, line)
-        line = OII
-        obsFlux2 = findLineFlux(objLines, line)
-        objDF.loc[i, 'NeIII/OII'] = obsFlux1/obsFlux2
+    if OII in objLines['lineID'].values and NeIII in objLines['lineID'].values:
+        line1 = OII
+        line2 = NeIII
+        corrRatio = computeRatio(line1,line2)
+        objDF.loc[i, 'NeIII/OII'] = corrRatio
 #    import pdb; pdb.set_trace()
 
         
@@ -110,6 +128,51 @@ def lineRatios(objDF, lineDF):
     '''
     'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII'
     '''
+
+
+'''
+    if Halpha in objLines['lineID'].values:
+        HalphaFlux = findLineFlux(Halpha)
+        curveDiffB1 = findLineCurveDiff(Halpha)
+        if NII in objLines['lineID'].values:
+            line = NII
+            obsFlux = findLineFlux(line)
+            curveDiffB2 = findLineCurveDiff(line)
+            obsRatio = obsFlux/HalphaFlux
+            corrRatio = obsRatio * 10**(redCoeff * curveDiffB2-curveDiffB1)
+            objDF.loc[i, 'NII/Ha'] = corrRatio
+            
+        if SII in objLines['lineID'].values:
+            line = SII
+            obsFlux = findLineFlux(line)
+            objDF.loc[i, 'SII/Ha'] = obsFlux/HalphaFlux
+            
+    if Hbeta in objLines['lineID'].values:
+        HbetaFlux = findLineFlux(Hbeta)
+        if OIII in objLines['lineID'].values:
+            line = OIII
+            obsFlux = findLineFlux(line)
+            objDF.loc[i, 'OIII/Hb'] = obsFlux/HbetaFlux
+            
+        if OII in objLines['lineID'].values:
+            line = OII
+            obsFlux = findLineFlux(line)
+            objDF.loc[i, 'OII/Hb'] = obsFlux/HbetaFlux
+            
+        if NeIII in objLines['lineID'].values:
+            line = NeIII
+            obsFlux = findLineFlux(line)
+            objDF.loc[i, 'NeIII/Hb'] = obsFlux/HbetaFlux
+    
+    if NeIII in objLines['lineID'].values and OII in objLines['lineID'].values:
+        line = NeIII
+        obsFlux1 = findLineFlux(line)
+        line = OII
+        obsFlux2 = findLineFlux(line)
+        objDF.loc[i, 'NeIII/OII'] = obsFlux1/obsFlux2
+#    import pdb; pdb.set_trace()
+
+'''
 
 
 
@@ -137,5 +200,5 @@ def huh(objDF, lineDF, wave1, wave2, waveRef):
     
 
     
-    return curveDiff
+    return curveDiffB
 '''
