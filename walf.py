@@ -70,7 +70,7 @@ def run1Dspec(specFile, objID, deltaW):
         print('Redshift of measured line: ', round(z,5), '\n')
 
         ##Call ALFA to fit the spectrum and lines.
-        alfapath = '/home/bscousin/software/bin/alfa'
+        alfapath = '~/ALFAsoftware/bin/alfa'
         callALFA(alfapath, z, specFile, outPath)
         
         ##Extract info from ALFA's output for plotting and calculations.
@@ -224,7 +224,7 @@ def run1Dspec(specFile, objID, deltaW):
     #floatFormatter= lambda x: format(x, '6.3E')
     #np.set_printoptions(formatter={'float': floatFormatter})
     
-    objCols = ['objID','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestLineID', 'redCoeff',
+    objCols = ['objID','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestID', 'redCoef',
              'redFlag', 'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
     objDict = collections.OrderedDict(
                 {'objID': [objID],
