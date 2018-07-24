@@ -128,7 +128,6 @@ def run1Dspec(specFile, objID, deltaW):
             idxWindow = [idx[i]-idxRange, idx[i]+idxRange]
             
             contAvg[i] = np.mean( contF[ idxWindow[0] : idxWindow[1] ] )
-        print(contAvg)
         eqWidth = np.array(flux / contAvg)
 
 
@@ -220,23 +219,13 @@ def run1Dspec(specFile, objID, deltaW):
     if math.isnan(bestZ):
         strongestZ = lineZ.iloc[strongestIdx]
         bestZ = strongestZ
+
     #objID = objID.ljust(4)  #pad for output formatting purposes
     #floatFormatter= lambda x: format(x, '6.3E')
     #np.set_printoptions(formatter={'float': floatFormatter})
     
-#    lineIDtables = np.array(physW)
-
-    '''
-    lineTable = pd.read_csv('lines.csv',sep='\t',index_col=False)
-    tableW = lineTable['restW']
-    tableID = lineTable['ID']
-    lineIDidx = np.where(
-    
-    
-    '''
-    
     objCols = ['objID','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestLineID', 'redCoeff',
-             'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
+             'redFlag', 'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
     objDict = collections.OrderedDict(
                 {'objID': [objID],
                 'splotZ': format(z, '0.6f'),
@@ -245,6 +234,8 @@ def run1Dspec(specFile, objID, deltaW):
                 'nLines': nLines,
                 'bestLineID': strongestID,
                 'redCoeff': np.nan,
+#                'redFlag': np.nan,
+                'redFlag': int(),
                 'OIII/Hb': np.nan,
                 'OII/Hb': np.nan,
                 'NII/Ha': np.nan,
@@ -253,6 +244,9 @@ def run1Dspec(specFile, objID, deltaW):
                 'NeIII/OII': np.nan,
                 })
     objDF = pd.DataFrame(objDict, columns=objCols)
+    objDF.set_index(['objID'], inplace=True)
+    objDF['nLines'] = objDF['nLines'].astype(int)
+    objDF['bestLineID'] = objDF['bestLineID'].astype(int)
     
     lineCols = ['objID','lineID','observeW','physicalW','lineZ','flux','sigmaFlux','eqWidth','contAvg','fwhm']
     
@@ -281,10 +275,7 @@ def run1Dspec(specFile, objID, deltaW):
                 })
                 
     lineDF = pd.DataFrame(lineDict, columns=lineCols)
-    
-#    import pdb; pdb.set_trace()
-    
-    
+    lineDF.set_index(['objID'], inplace=True)
     return objDF, lineDF
 
 
@@ -298,15 +289,20 @@ def runMultispec(fpath, skyFile=''):
     
     Args:
     fpath       absolute path to a 2-dimensional set of spectra .fits file
+    skyFile     absolute path to a sky spectrum .fits files
     
     Returns:
-    -----
+    objDF           Pandas dataframe storing global data about each object. 
+                    One entry per object.
+    lineDF          Pandas dataframe storing data on emission lines in each 
+                    spectrum. One entry per emission line for each spectrum.
     
     Output Files:
     /1dspectra      directory for 1D spectra generated from the input 2D spectrum
     1dspec.*.fits   a single 1D spectrum generated from the input 2D spectrum; 
-    *.txt           output file containing fields for all spectra that the user
-                    does not skip
+    globalData.txt  csv output file containing global data about each object for 
+                    each spectra that the user does not skip
+    lineData.txt    same as above, but contains line data for each object
     '''
 
     datapath, basename = split(fpath)
@@ -379,8 +375,8 @@ def runMultispec(fpath, skyFile=''):
     #ensure that data is still written despite errors
     with open(outName1, 'w+') as f1, open(outName2, 'w+') as f2:
         start = True
-        for i in range(nSpec):
-#        for i in range(39, 42):
+#        for i in range(nSpec):
+        for i in range(39, 42):
         
             ##Run scopy to make a file for the current spectrum.
             objID = goodNames[i]
@@ -400,18 +396,24 @@ def runMultispec(fpath, skyFile=''):
             
             print('Writing line data for: ' +specFile+ '\n')
             if start:      #start of the file, so write headers
-                f1.write( cur_objDF.to_csv(sep='\t', index=False) )
-                f2.write( cur_lineDF.to_csv(sep='\t', index=False) )
+                f1.write( cur_objDF.to_csv(sep='\t', index=True) )
+                f2.write( cur_lineDF.to_csv(sep='\t', index=True) )
                 start = False
             else:
-                f1.write( cur_objDF.to_csv(sep='\t', index=False, header=False) )
-                f2.write( cur_lineDF.to_csv(sep='\t', index=False, header=False) )
+                f1.write( cur_objDF.to_csv(sep='\t', index=True, header=False) )
+                f2.write( cur_lineDF.to_csv(sep='\t', index=True, header=False) )
     
 #        print('Writing line data for: ' +specFile+ '\n')
 #        objDF.to_csv(outName1, sep='\t', index=False)
 #        lineDF.to_csv(outName2, sep='\t', index=False)
     
     import completion; completion.thanksForPlaying()
+    
+    import lineRatios
+    objDF, lineDF = lineRatios.redCorrRatios(objDF, lineDF)
+    objDF.to_csv( join(datapath, 'globalData_ratios.txt'), sep='\t', index=True)
+    
+    return objDF,lineDF
     
 #    #scrape up all the files written by ALFA
 #    allFiles = [f for f in listdir( join(datapath,savefolder) ) if f.endswith('.fits_fit') or f.endswith('.fits_lines')]
@@ -565,10 +567,11 @@ def readSplotLog(logFile):
 
 fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
-skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
+#skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
 
-fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
+#fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
+
 ##fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fp.ms.fits'
-runMultispec(fpath, skyFile)
+objDF, lineDF = runMultispec(fpath, skyFile)
 
 
