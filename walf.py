@@ -70,7 +70,8 @@ def run1Dspec(specFile, objID, deltaW):
         print('Redshift of measured line: ', round(z,5), '\n')
 
         ##Call ALFA to fit the spectrum and lines.
-        alfapath = '~/ALFAsoftware/bin/alfa'
+#        alfapath = '~/ALFA/bin/alfa'
+        alfapath = '~/ALFA/bin/alfa'
         callALFA(alfapath, z, specFile, outPath)
         
         ##Extract info from ALFA's output for plotting and calculations.
@@ -232,7 +233,7 @@ def run1Dspec(specFile, objID, deltaW):
                 'alfaZ': format(bestZ, '0.6f'),
                 'sigmaZ': format(bestZstd, '0.2e'),
                 'nLines': nLines,
-                'bestLineID': strongestID,
+                'bestID': strongestID,
                 'redCoeff': np.nan,
 #                'redFlag': np.nan,
                 'redFlag': int(),
@@ -246,7 +247,7 @@ def run1Dspec(specFile, objID, deltaW):
     objDF = pd.DataFrame(objDict, columns=objCols)
     objDF.set_index(['objID'], inplace=True)
     objDF['nLines'] = objDF['nLines'].astype(int)
-    objDF['bestLineID'] = objDF['bestLineID'].astype(int)
+    objDF['bestID'] = objDF['bestID'].astype(int)
     
     lineCols = ['objID','lineID','observeW','physicalW','lineZ','flux','sigmaFlux','eqWidth','contAvg','fwhm']
     
@@ -384,7 +385,11 @@ def runMultispec(fpath, skyFile=''):
             pad_ap = format(curAp, '04d')
             specName = '1dspec.'+pad_ap+'.fits'
             specFile = join(specPath, specName)
-            iraf.scopy(input=fpath, output=join(specPath, '1dspec'), apertures=curAp)
+#            iraf.scopy(input=fpath, output=join(specPath, '1dspec'+), apertures=curAp)
+            iraf.scopy(input=fpath, output=specFile, apertures=curAp)
+            
+            #need to pause to let the file write
+            sleep(1)
             
             ##Process the 1D spectrum.
             cur_objDF, cur_lineDF = run1Dspec(specFile, objID, deltaW)
@@ -569,7 +574,7 @@ fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
 #skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
 
-#fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
+fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
 
 ##fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fp.ms.fits'
 objDF, lineDF = runMultispec(fpath, skyFile)
