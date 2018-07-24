@@ -12,8 +12,8 @@ def redCorrRatios(objDF, lineDF):
                 the chosen line and reference Hbeta line
     '''
 
-#    objDF = pd.read_csv('globalData.txt', sep='\t', index_col=0)
-#    lineDF = pd.read_csv('lineData.txt', sep='\t', index_col=0)
+    objDF = pd.read_csv('globalData00.txt', sep='\t', index_col=0)
+    lineDF = pd.read_csv('lineData00.txt', sep='\t', index_col=0)
 
     Hbeta = 4861
     Halpha = 6563
@@ -50,8 +50,8 @@ def redCorrRatios(objDF, lineDF):
         else:
             curveDiffB1 = findLineCurveDiff(line1)
             curveDiffB2 = findLineCurveDiff(line2)
-            corrRatio = obsRatio * 10**(redCoeff * (curveDiffB2-curveDiffB1) )
-        
+            corrRatio = obsRatio * 10**(redCoef * (curveDiffB2-curveDiffB1) )
+    #    import pdb; pdb.set_trace()
         return corrRatio
 
     testIDs = ['1627','217','Dot']
@@ -75,8 +75,8 @@ def redCorrRatios(objDF, lineDF):
             HbetaFlux = findLineFlux(Hbeta)
             obsRatio = float(obsFlux / HbetaFlux)
 
-            redCoeff = reddeningCorr(obsRatio, intrRatio, curveDiffB)
-                
+            redCoef = reddeningCorr(obsRatio, intrRatio, curveDiffB)
+            
         #OIII detected
         elif Hgamma in objLines['lineID'].values and Hbeta in objLines['lineID'].values:
             line = Hgamma
@@ -89,22 +89,22 @@ def redCorrRatios(objDF, lineDF):
             HbetaFlux = findLineFlux(Hbeta)
             obsRatio = float(obsFlux / HbetaFlux)
 
-            redCoeff = reddeningCorr(obsRatio, intrRatio, curveDiffB)
+            redCoef = reddeningCorr(obsRatio, intrRatio, curveDiffB)
         else:   #cry me a river
             flag = 0
-            redCoeff = -1
+            redCoef = -1
 
         #if a coefficient has already been stored, read it in instead
-        if not math.isnan(objDF.loc[i, 'redCoeff']):
-            redCoeff = objDF.loc[i, 'redCoeff']
+        if not math.isnan(objDF.loc[i, 'redCoef']):
+            redCoef = objDF.loc[i, 'redCoef']
             flag = objDF.loc[i, 'redFlag']
         else:
-            objDF.loc[i, 'redCoeff'] = redCoeff
+            objDF.loc[i, 'redCoef'] = redCoef
             objDF.loc[i, 'redFlag'] = flag
         
         ##Compute line ratios
         NII = 6584
-        SII_1 = 6717
+        SII_1 = 6716
         SII_2 = 6731
         OII_1 = 3726
         OII_2 = 3729
@@ -149,3 +149,6 @@ def redCorrRatios(objDF, lineDF):
             objDF.loc[i, 'NeIII/OII'] = np.round(corrRatio, 4)
     #    import pdb; pdb.set_trace()
     return objDF, lineDF
+
+#objDF.to_csv('globalData.txt',sep='\t', index=True)
+#lineDF.to_csv('lineData.txt',sep='\t', index=True)
