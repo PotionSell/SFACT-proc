@@ -70,9 +70,7 @@ def run1Dspec(specFile, objID, deltaW):
         print('Redshift of measured line: ', round(z,5), '\n')
 
         ##Call ALFA to fit the spectrum and lines.
-        alfapath = '~/ALFA/bin/alfa'
-        callALFA(alfapath, z, specFile, outPath)
-        
+        callALFA(z, specFile, outPath)
         ##Extract info from ALFA's output for plotting and calculations.
 
         #read in spectral data from ALFA
@@ -431,14 +429,12 @@ def run1Dfrom2D(fpath, apNum):
     pass
 
 
-def callALFA(alfapath, z, specFile, outPath):
+def callALFA(z, specFile, outPath):
     '''
     Internal function for run1Dspec. Calls the Automated-Line-Fitting-Algorithm
     (ALFA) from the command line using determined parameters.
     
     Args:
-    alfapath    absolute path to the system's ALFA install (***may not be needed
-                for proper installs***)
     z           redshift of the spectrum
     specFile    absolute path to the spectrum file
     outPath     absolute path to the output directory
@@ -449,22 +445,31 @@ def callALFA(alfapath, z, specFile, outPath):
     
     v = z * 299792	#km/s
     strongCat = ' optical_strongCustom.cat '
-    deepCat = ' optical_deepCustom2.cat '
+    deepCat = ' optical_deepCustom.cat '
     #set window size used during continuum fitting
-    try:
-       winSize=eval(input('Enter the window size to be used for continuum fitting, '\
-                    'or press enter for the default of 150 pixels"\n'))
-    except SyntaxError:
-        winSize = 150
+    while(True):
+        try:
+            winSize=eval(input('Enter the window size to be used for continuum fitting, '\
+                        'or press enter for the default of 150 pixels"\n'))
+            winSize = int(winSize)    #trigger a Name/ValueError if not an int
+        except (NameError, ValueError):
+            print('Invalid input - please enter an integer window size:\n')
+            continue
+        except SyntaxError:
+            winSize = 150
+        if winSize <= 0:
+            print('Invalid input - please enter an integer window size:\n')
+            continue
+        break
 
-    paramStr =  ' -ul  -n 0  -vg ' +str(v)+ ' -cw ' +str(winSize)+ \
+    paramStr =  'alfa -ul  -n 0  -vg ' +str(v)+ ' -cw ' +str(winSize)+ \
                 ' -o ' +outPath+ ' -sc' +strongCat+ '-dc' +deepCat+ ' '
     #-ul gets upper limit output; -n specifies normalization (none in this case)
     # -vg specifies velocity guess; -cw specifies the window size
     #-o specifies the path for output files; -sc/-dc specify line catalogs
     #See ALFA's manual for more info: >>> man alfa
 
-    alfaCommand = alfapath + paramStr + specFile
+    alfaCommand = paramStr + specFile
 #    process = subprocess.call(alfaCommand, shell=True)
     process = subprocess.call(alfaCommand, shell=True, stdout=subprocess.PIPE)	#muted output
 
