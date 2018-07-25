@@ -70,7 +70,6 @@ def run1Dspec(specFile, objID, deltaW):
         print('Redshift of measured line: ', round(z,5), '\n')
 
         ##Call ALFA to fit the spectrum and lines.
-#        alfapath = '~/ALFA/bin/alfa'
         alfapath = '~/ALFA/bin/alfa'
         callALFA(alfapath, z, specFile, outPath)
         
@@ -376,8 +375,8 @@ def runMultispec(fpath, skyFile=''):
     #ensure that data is still written despite errors
     with open(outName1, 'w+') as f1, open(outName2, 'w+') as f2:
         start = True
-#        for i in range(nSpec):
-        for i in range(39, 42):
+        for i in range(nSpec):
+#        for i in range(39, 42):
         
             ##Run scopy to make a file for the current spectrum.
             objID = goodNames[i]
@@ -574,7 +573,7 @@ fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
 #skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
 
-fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
+#fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
 
 ##fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fp.ms.fits'
 objDF, lineDF = runMultispec(fpath, skyFile)
