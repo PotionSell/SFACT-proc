@@ -12,8 +12,8 @@ def redCorrRatios(objDF, lineDF):
                 the chosen line and reference Hbeta line
     '''
 
-    objDF = pd.read_csv('globalData00.txt', sep='\t', index_col=0)
-    lineDF = pd.read_csv('lineData00.txt', sep='\t', index_col=0)
+#    objDF = pd.read_csv('globalData00.txt', sep='\t', index_col=0)
+#    lineDF = pd.read_csv('lineData00.txt', sep='\t', index_col=0)
 
     Hbeta = 4861
     Halpha = 6563
