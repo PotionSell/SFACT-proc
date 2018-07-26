@@ -1,5 +1,8 @@
 #!/usr/bin/python
 
+import matplotlib
+matplotlib.use('TkAgg')     #graphics setting so that iraf.splot doesn't blow up on Macs
+
 import subprocess
 import collections
 import math
