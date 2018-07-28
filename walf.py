@@ -133,8 +133,29 @@ def run1Dspec(specFile, objID, deltaW):
 
 
         ##Create spectrum plot.
-        
-        fig = plt.figure(figsize=(18,12))
+#        fig = plt.figure(figsize=(18,12))        
+
+        #BSC 072718 MESSING AROUND BUT IT WON'T WORK
+        #Manually making a navigation toolbar never works when I make a figure of a
+        #pre-specified size. It doubles up the existing toolbar when I call it on any
+        #other figure. If i call a normal figure of default size, the toolbar(s) appear
+        #Okay it's just related to the size of the figure, and if it spans the vertical
+        #space of the screen.
+        #But, getting the current screen size with .plt generates a second plot window.
+        #So i can't use that. For now, just set the size to something smallish but big
+        #enough. Even then, the toolbar is hidden until resizing the window.
+
+        #window = plt.get_current_fig_manager().window
+        #screenX, screenY = window.wm_maxsize()
+        #dpi = 100
+        #fig = plt.figure( figsize=( int(screenX/dpi/1.5), int(screenY/dpi/1.2)),dpi=dpi )
+        fig = plt.figure(figsize=(14,8))
+
+        #from matplotlib.backends.backend_tkagg import NavigationToolbar2TkAgg as NavigationToolbar
+        #win = fig.canvas.manager.window
+        #canvas = fig.canvas
+        #toolbar = NavigationToolbar(canvas, win)
+
         plt.plot(specW, specF, c='grey', label='original spectrum')
         plt.plot(specW, contF, c='black', ls='--', label='continuum fit')
 
