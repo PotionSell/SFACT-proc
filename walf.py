@@ -464,8 +464,9 @@ def classifySpectrum():
                             '5 for quasar\n'
                             '6 for HII Region\n'
                             '---\n'
-                            '18 for falsely-detected galaxy\n'
-                            '19 for falsely-detected star\n'
+                            '17 for false-detection (other)\n'
+                            '18 for false-detection (galaxy)\n'
+                            '19 for false-detection (star)\n'
                             ))
             objFlag = int(objFlag)    #trigger a Name/ValueError if not a float
         except (ValueError, NameError, SyntaxError):     #user gives non-integer input
