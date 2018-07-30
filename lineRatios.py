@@ -15,15 +15,7 @@ def redCorrRatios(objDF, lineDF):
 #    objDF = pd.read_csv('globalData00.txt', sep='\t', index_col=0)
 #    lineDF = pd.read_csv('lineData00.txt', sep='\t', index_col=0)
 
-    Hbeta = 4861
-    Halpha = 6563
-    Hgamma = 4340
-
-    #load table of line IDs for later use
-    lineID_DF = pd.read_csv('lines.csv', sep='\t')
-
-    objIDs = objDF.index
-
+    ##Internal functions:
     #reddening correction formula
     reddeningCorr = lambda obsRatio, intrRatio, curveDiffB: -np.log10(obsRatio/intrRatio) / curveDiffB
 
@@ -51,18 +43,34 @@ def redCorrRatios(objDF, lineDF):
             curveDiffB1 = findLineCurveDiff(line1)
             curveDiffB2 = findLineCurveDiff(line2)
             corrRatio = obsRatio * 10**(redCoef * (curveDiffB2-curveDiffB1) )
-    #    import pdb; pdb.set_trace()
         return corrRatio
 
-    testIDs = ['1627','217','Dot']
+
+    Hbeta = 4861
+    Halpha = 6563
+    Hgamma = 4340
+
+    #load table of line IDs for later use
+    lineID_DF = pd.read_csv('lines.csv', sep='\t')
+
+    objIDs = objDF.index
+    
+    #testIDs = ['1627','217','Dot']
     #for i in testIDs:
 
     for i in objIDs:
-        #skip if the object has only 1 line (which triggers errors if I don't skip it)
-        if objDF.loc[i]['nLines'] == 1: continue
+        #skip if the object has zero or one line (which triggers errors if I don't skip it)
+        nLines = objDF.loc[i]['nLines']
+        if nLines == 1 or np.isnan(nLines): 
+            flag = -1
+            redCoef = -1
+            objDF.loc[i, 'redCoef'] = redCoef
+            objDF.loc[i, 'redFlag'] = flag
+            continue
         
         #look at only the current object's lines
         objLines = lineDF.loc[i]
+        
         #Halpha detected
         if Halpha in objLines['lineID'].values and Hbeta in objLines['lineID'].values:
             line = Halpha
@@ -91,7 +99,7 @@ def redCorrRatios(objDF, lineDF):
 
             redCoef = reddeningCorr(obsRatio, intrRatio, curveDiffB)
         else:   #cry me a river
-            flag = 0
+            flag = -1
             redCoef = -1
 
         #if a coefficient has already been stored, read it in instead
@@ -99,8 +107,8 @@ def redCorrRatios(objDF, lineDF):
             redCoef = objDF.loc[i, 'redCoef']
             flag = objDF.loc[i, 'redFlag']
         else:
-            objDF.loc[i, 'redCoef'] = redCoef
-            objDF.loc[i, 'redFlag'] = flag
+            objDF.loc[i, 'redCoef'] = np.round( redCoef, 4 )
+            objDF.loc[i, 'redFlag'] = np.round( flag, 4 )
         
         ##Compute line ratios
         NII = 6584
@@ -147,7 +155,8 @@ def redCorrRatios(objDF, lineDF):
             line3 = OII_2
             corrRatio = 1. / computeRatio(flag,line1,line2,line3)
             objDF.loc[i, 'NeIII/OII'] = np.round(corrRatio, 4)
-    #    import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
+    objDF['redFlag'] = objDF['redFlag'].astype(int)
     return objDF, lineDF
 
 #objDF.to_csv('globalData.txt',sep='\t', index=True)
