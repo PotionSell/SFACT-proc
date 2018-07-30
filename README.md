@@ -15,7 +15,7 @@ identities, fluxes, and equivalent widths
 3) the continuum and emission lines are displayed and saved via Matplotlib
 4) the user can then remeasure the spectrum, or keep ALFA's estimates. If kept, the estimates and other data are packaged in 
 Pandas dataframes
-5) steps 1-5 are repeated for each spectrum
+5) steps 1-4 are repeated for each spectrum
 6) data is written into two files
 7) emission line data is used to compute reddening coefficients and corrected line ratios; this is also saved to file
 
