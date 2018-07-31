@@ -66,8 +66,9 @@ def run1Dspec(specFile, objID, deltaW):
         
         if skip:
             objFlag = classifySpectrum()
-            objDF = sparseDF(objID, objFlag)
-            return objDF, pd.DataFrame()
+            objDF = sparseObjDF(objID, objFlag)
+            lineDF = sparseLineDF()
+            return objDF, lineDF
         
         #adjust for sky line correction
         userW = userW - deltaW
@@ -138,24 +139,15 @@ def run1Dspec(specFile, objID, deltaW):
 
 
         ##Create spectrum plot.
-#        fig = plt.figure(figsize=(18,12))        
-
-        #BSC 072718 MESSING AROUND BUT IT WON'T WORK
-        #Manually making a navigation toolbar never works when I make a figure of a
-        #pre-specified size. It doubles up the existing toolbar when I call it on any
-        #other figure. If i call a normal figure of default size, the toolbar(s) appear
-        #Okay it's just related to the size of the figure, and if it spans the vertical
-        #space of the screen.
-        #But, getting the current screen size with .plt generates a second plot window.
-        #So i can't use that. For now, just set the size to something smallish but big
-        #enough. Even then, the toolbar is hidden until resizing the window.
-
+        
+        #create plot size depending on user's monitor
         #window = plt.get_current_fig_manager().window
         #screenX, screenY = window.wm_maxsize()
         #dpi = 100
         #fig = plt.figure( figsize=( int(screenX/dpi/1.5), int(screenY/dpi/1.2)),dpi=dpi )
         fig = plt.figure(figsize=(14,8))
-
+        
+        #manually add toolbar
         #from matplotlib.backends.backend_tkagg import NavigationToolbar2TkAgg as NavigationToolbar
         #win = fig.canvas.manager.window
         #canvas = fig.canvas
@@ -179,10 +171,10 @@ def run1Dspec(specFile, objID, deltaW):
             text = str(i) +'\n('+ str(k) +')'
             ax.annotate(text, xy=(i+xcorr,j+ycorr))
 #        import pdb; pdb.set_trace()
-        plt.title('Fitted lines for spectrum ' +specName+ '; object ID ' +objID, size=24)
+        plt.title('Spectrum ' +specName+ '; object ID ' +objID, size=24)
         plt.xlim(min(specW-100), max(specW+100))
         plt.xlabel(r'wavelength ($\AA$)', size=20)
-        plt.ylabel(r'flux ($units$)', size=20)
+        plt.ylabel('flux', size=20)
         plt.legend(loc='upper left', prop={'size': 16})
         
         plt.savefig( join(imagepath, specName+'.png') )
@@ -199,8 +191,10 @@ def run1Dspec(specFile, objID, deltaW):
         while(True):     #loop until user gives valid input
             try: 
                 redo = eval(input(
-                            '*****Would you like to redo the line estimation? ' \
-                            'Enter 0 to skip; 1 to redo; 2 to keep the current estimate:\n'
+                            '*****The spectrum has been analyzed. Enter:\n'
+                            '0 to skip (flag and redshift are saved, but not line data)\n'
+                            '1 to remeasure the spectrum\n'
+                            '2 to keep the current estimate (line data is saved)\n'
                             ))
                 redo = int(redo)        #trigger a ValueError if user gives bad input
             except (ValueError, NameError, SyntaxError):     #user gives non-integer input
@@ -213,8 +207,9 @@ def run1Dspec(specFile, objID, deltaW):
             elif redo == 0:
                 #return, ending the function
                 objFlag = classifySpectrum()
-                objDF = sparseDF(objID, objFlag)
-                return objDF, pd.DataFrame()
+                objDF = sparseObjDF(objID, objFlag, z)
+                lineDF = sparseLineDF()
+                return objDF, lineDF
             elif redo == 1:
                 good = True
                 #set window size used during continuum fitting
@@ -404,6 +399,7 @@ def promptLine(specFile, specType):
             except (NameError, ValueError, SyntaxError):
                 print('Invalid input - please enter 0, 1, 2, 3, or a wavelength:\n')
                 continue
+            if key > 3 and key < 2000: continue
             #set the wavelength based on input key
             #it would be nice if Python had a switch-statement...
             if key == 0: return ('','',1)      #user wants to skip
@@ -450,7 +446,7 @@ def promptLine(specFile, specType):
 
 def classifySpectrum():
     
-    validFlags = [0,1,2,3,4,5,6,18,19]
+    validFlags = [0,1,2,3,4,5,6,17,18,19]
     print('\n*****Identify the spectrum with a flag:')
     while(True):     #loop until user gives valid input
         try: 
@@ -493,7 +489,7 @@ def readSplotLog(logFile):
     recentRow = splotData.iloc[-1][:]
     return recentRow
 
-def sparseDF(objID, objFlag):
+def sparseObjDF(objID, objFlag, splotZ=np.nan):
     '''
     User wants to skip a spectrum, so create a dataframe with the object ID and 
     object flag as the only global data.
@@ -503,7 +499,7 @@ def sparseDF(objID, objFlag):
     objDict = collections.OrderedDict(
                 {'objID': [objID],
                 'objFlag': [objFlag],
-                'splotZ': np.nan,
+                'splotZ': format(splotZ, '0.6f'),
                 'alfaZ': np.nan,
                 'sigmaZ': np.nan,
                 'nLines': np.nan,
@@ -522,6 +518,15 @@ def sparseDF(objID, objFlag):
     objDF.set_index(['objID'], inplace=True)
     return objDF
 
+def sparseLineDF():
+    '''
+    User wants to skip a spectrum, so create a line dataframe with empty entries
+    (for consistency, and to get proper output).
+    '''
+    lineCols = ['objID','lineID','observeW','physicalW','lineZ','flux','sigmaFlux','eqWidth','contAvg','fwhm']
+    lineDF = pd.DataFrame(columns=lineCols)
+    lineDF.set_index(['objID'], inplace=True)
+    return lineDF
 
 def runMultispec(fpath, skyFile=''):
     '''
@@ -562,7 +567,7 @@ def runMultispec(fpath, skyFile=''):
         try:
             print('\n*****Running a sky line correction. Displaying sky spectrum. ' \
                     'Follow the prompts and measure a sky line.')
-            userW, restW, _ = promptLine(skyFile, 'sky')
+            userW, restW, __ = promptLine(skyFile, 'sky')
             deltaW = userW-restW
         except: deltaW = 0
     else: deltaW = 0
@@ -629,8 +634,7 @@ def runMultispec(fpath, skyFile=''):
             pad_ap = format(curAp, '04d')
             specName = '1dspec.'+pad_ap+'.fits'
             specFile = join(specPath, specName)
-#            iraf.scopy(input=fpath, output=join(specPath, '1dspec'+), apertures=curAp)
-            iraf.scopy(input=fpath, output=specFile, apertures=curAp)
+            iraf.scopy(input=fpath, output=specFile, apertures=curAp, clobber='yes')
             
             #need to pause to let the file write
             sleep(1)

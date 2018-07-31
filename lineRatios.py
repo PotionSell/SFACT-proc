@@ -60,7 +60,7 @@ def redCorrRatios(objDF, lineDF):
 
     for i in objIDs:
         #skip if the object has zero or one line (which triggers errors if I don't skip it)
-        nLines = objDF.loc[i]['nLines']
+        nLines = objDF.loc[i,'nLines']
         if nLines == 1 or np.isnan(nLines): 
             flag = -1
             redCoef = -1
@@ -155,7 +155,6 @@ def redCorrRatios(objDF, lineDF):
             line3 = OII_2
             corrRatio = 1. / computeRatio(flag,line1,line2,line3)
             objDF.loc[i, 'NeIII/OII'] = np.round(corrRatio, 4)
-    import pdb; pdb.set_trace()
     objDF['redFlag'] = objDF['redFlag'].astype(int)
     return objDF, lineDF
 
