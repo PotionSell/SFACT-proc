@@ -190,27 +190,35 @@ def run1Dspec(specFile, objID, deltaW):
         #if they keep, then break to the main loop and do not try again
         while(True):     #loop until user gives valid input
             try: 
+                validRedo = [0,1,2,3]
                 redo = eval(input(
                             '*****The spectrum has been analyzed. Enter:\n'
-                            '0 to skip (flag and redshift are saved, but not line data)\n'
-                            '1 to remeasure the spectrum\n'
-                            '2 to keep the current estimate (line data is saved)\n'
+                            '0 to skip (flag is saved, but not redshift or line data)\n'
+                            '1 to skip (flag and redshift are saved, but not line data)\n'
+                            '2 to remeasure the spectrum\n'
+                            '3 to keep the current estimate (line data is saved)\n'
                             ))
                 redo = int(redo)        #trigger a ValueError if user gives bad input
             except (ValueError, NameError, SyntaxError):     #user gives non-integer input
-                print('Invalid input - please enter 0, 1, or 2:\n')
+                print('Invalid input - please enter 0, 1, 2, or 3:\n')
                 continue
-            if (redo != 0 and redo != 1 and redo != 2): 
-                print('Invalid input - please enter 0, 1, or 2:\n')
+            if redo not in validRedo: 
+                print('Invalid input - please enter 0, 1, 2, or 3:\n')
                 continue
             
             elif redo == 0:
                 #return, ending the function
                 objFlag = classifySpectrum()
-                objDF = sparseObjDF(objID, objFlag, z)
+                objDF = sparseObjDF(objID, objFlag)
                 lineDF = sparseLineDF()
                 return objDF, lineDF
             elif redo == 1:
+                #return, ending the function
+                objFlag = classifySpectrum()
+                objDF = sparseObjDF(objID, objFlag, z)
+                lineDF = sparseLineDF()
+                return objDF, lineDF
+            elif redo == 2:
                 good = True
                 #set window size used during continuum fitting
                 while(True):
@@ -229,7 +237,7 @@ def run1Dspec(specFile, objID, deltaW):
                     break
                 
                 break
-            elif redo == 2:
+            elif redo == 3:
                 good = False
                 objFlag = classifySpectrum()
                 break
@@ -537,7 +545,7 @@ def runMultispec(fpath, skyFile=''):
     in order to derive a redshift to be used in ALFA.
     
     Args:
-    fpath       absolute path to a 2-dimensional set of spectra .fits file
+    fpath       absolute path to a 2-dimensional sBased on your recent activity, I'd like to give you a special offer - a one month free upgrade to LinkedIn Premium.Based on your recent activity, I'd like to give you a special offer - a one month free upgrade to LinkedIn Premium.et of spectra .fits file
     skyFile     absolute path to a sky spectrum .fits files
     
     Returns:
@@ -612,6 +620,23 @@ def runMultispec(fpath, skyFile=''):
     
     nSpec = len(goodNums)
     
+    #prompt user to say which spectrum to start on
+    while(True):
+        try:
+            startSpec = eval(input('\nThere are ' +str(nSpec)+ ' spectra; press enter to start '
+                        'at the first spectrum, or enter a number to start at a later spectrum:\n'))
+            startSpec = int(startSpec)    #trigger a Name/ValueError if not an int
+        except (NameError, ValueError):
+            print('Invalid input - please enter an integer between ' +str(1)+ ' and ' +str(nSpec)+ ':\n')
+            continue
+        except SyntaxError:
+            startSpec = 1
+        if startSpec > nSpec or startSpec < 1:
+            print('Invalid input - please enter an integer between ' +str(1)+ ' and ' +str(nSpec)+ ':\n')
+            continue
+        break
+
+    
     ##Prepare to write to file. Each spectrum is processed and written with the 
     ##output file open, so processed data is still written even if the code 
     ##crashes/escapes. 
@@ -625,7 +650,8 @@ def runMultispec(fpath, skyFile=''):
     #ensure that data is still written despite errors
     with open(outName1, 'w+') as f1, open(outName2, 'w+') as f2:
         start = True
-        for i in range(nSpec):
+        for i in range(startSpec-1, nSpec):
+#        for i in range(nSpec):
 #        for i in range(39, 42):
         
             ##Run scopy to make a file for the current spectrum.
