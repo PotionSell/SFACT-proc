@@ -20,7 +20,7 @@ from io import StringIO
 from pyraf import iraf
 
 
-def run1Dspec(specFile, objID, deltaW):
+def run1Dspec(specFile, objID, deltaW=0):
     '''
     Processes a 1-dimensional .fits spectrum using ALFA.
     
@@ -62,7 +62,6 @@ def run1Dspec(specFile, objID, deltaW):
     good = True
     while(good):
         userW, restW, skip = promptLine(specFile, 'science')
-#        deltaW = abs(userW-restW)
         
         if skip:
             objFlag = classifySpectrum()
@@ -565,6 +564,9 @@ def runMultispec(fpath, skyFile=''):
     datapath, basename = split(fpath)
     fname, __ = splitext(basename)
     
+    #get the name of the data field, assuming a fname structure of "[NAME]_[EXTENSION]"
+    fieldName = fname.split('_')[0]
+    
     #directories for output files (create if nonexistent)
     specPath = join(datapath, '1dspectra')
     if not exists(specPath):
@@ -640,8 +642,8 @@ def runMultispec(fpath, skyFile=''):
     ##Prepare to write to file. Each spectrum is processed and written with the 
     ##output file open, so processed data is still written even if the code 
     ##crashes/escapes. 
-    outName1 = join(datapath, 'globalData.txt')
-    outName2 = join(datapath, 'lineData.txt')
+    outName1 = join(datapath, fieldName+'_globalData.txt')
+    outName2 = join(datapath, fieldName+'_lineData.txt')
     
     
     objDF = pd.DataFrame()
@@ -655,7 +657,17 @@ def runMultispec(fpath, skyFile=''):
 #        for i in range(39, 42):
         
             ##Run scopy to make a file for the current spectrum.
+
             objID = goodNames[i]
+            #if different objects have the same objID, add 'a' to the latter duplicates
+            #e.g. three entries of 2018 will become: '2018', '2018a', '2018aa'
+            #This is redundantly called every loop, which could be cleaned up
+            if (goodNames == objID).sum() > 1:
+                nameIdx = np.argwhere(goodNames == objID)
+                numDups = len(nameIdx)
+                for x in range(numDups):
+                    goodNames[nameIdx[x]] = objID + 'a'*x
+            
             curAp = int(goodNums[i])
             pad_ap = format(curAp, '04d')
             specName = '1dspec.'+pad_ap+'.fits'
@@ -667,8 +679,10 @@ def runMultispec(fpath, skyFile=''):
             
             ##Process the 1D spectrum.
             cur_objDF, cur_lineDF = run1Dspec(specFile, objID, deltaW)
-#            #if user skipped the spectrum, the DFs are empty, so continue to next spectrum
-#            if cur_objDF.empty: continue
+        
+            #make NaNs appear blank when viewing a file. But the blank spaces will still
+            #be filled with NaNs when loaded back into Python (as desired)
+            objDF = objDF.replace('nan','')
         
             objDF = objDF.append(cur_objDF)
             lineDF = lineDF.append(cur_lineDF)
@@ -682,15 +696,12 @@ def runMultispec(fpath, skyFile=''):
                 f1.write( cur_objDF.to_csv(sep='\t', index=True, header=False) )
                 f2.write( cur_lineDF.to_csv(sep='\t', index=True, header=False) )
     
-#        print('Writing line data for: ' +specFile+ '\n')
-#        objDF.to_csv(outName1, sep='\t', index=False)
-#        lineDF.to_csv(outName2, sep='\t', index=False)
-    
     import completion; completion.thanksForPlaying()
     
     import lineRatios
     objDF, lineDF = lineRatios.redCorrRatios(objDF, lineDF)
-    objDF.to_csv( join(datapath, 'globalData_ratios.txt'), sep='\t', index=True)
+    outName3 = join(datapath, fieldName+'_globalData_ratios.txt')
+    objDF.to_csv(outName3, sep='\t', index=True)
     
     return objDF,lineDF
     
@@ -702,10 +713,8 @@ def runMultispec(fpath, skyFile=''):
 fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
 #skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
-
 #fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
 
-##fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fp.ms.fits'
 objDF, lineDF = runMultispec(fpath, skyFile)
 
 
