@@ -60,6 +60,7 @@ def redCorrRatios(objDF, lineDF):
 
     for i in objIDs:
         #skip if the object has zero or one line (which triggers errors if I don't skip it)
+#        import pdb; pdb.set_trace()
         nLines = objDF.loc[i,'nLines']
         if nLines == 1 or np.isnan(nLines): 
             flag = -1
@@ -156,6 +157,10 @@ def redCorrRatios(objDF, lineDF):
             corrRatio = 1. / computeRatio(flag,line1,line2,line3)
             objDF.loc[i, 'NeIII/OII'] = np.round(corrRatio, 4)
     objDF['redFlag'] = objDF['redFlag'].astype(int)
+    
+    #make NaNs appear blank when viewing a file. But the blank spaces will still
+    #be filled with NaNs when loaded back into Python (as desired)
+    objDF = objDF.replace('nan','')
     return objDF, lineDF
 
 #objDF.to_csv('globalData.txt',sep='\t', index=True)
