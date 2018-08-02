@@ -2,11 +2,11 @@
 
 Spectral processing codes for the Star Formation Across Cosmic Time (SFACT) extragalactic survey.
 
-Processing is currently centered on WALF (Wrapped Automated Line Fitting). WALF is, at its core, a Python wrapper for a
+Processing is currently centered on WRALF (WRapped Automated Line Fitting). WRALF is, at its core, a Python wrapper for a
 customized version of the automated line-fitting code ALFA (customized version: https://github.com/PotionSell/ALFA and source:
 https://github.com/rwesson/ALFA).
 
-WALF operates on one- or two-dimensional spectral files in .fits format. It uses Pyraf (IRAF packaged as a Python module) to let the user interact with spectra via IRAF's splot tool.
+WRALF operates on one- or two-dimensional spectral files in .fits format. It uses Pyraf (IRAF packaged as a Python module) to let the user interact with spectra via IRAF's splot tool.
 
 In standard use, the program structure is as follows:
 1) starting with the first spectrum, the user is prompted to measure one emission line with a known rest wavelength
