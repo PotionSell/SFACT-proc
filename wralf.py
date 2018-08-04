@@ -20,25 +20,26 @@ from io import StringIO
 from pyraf import iraf
 
 
-def run1Dspec(specFile, objID, deltaW=0):
+def run1Dspec(specFile, objID='----', deltaW=0):
     '''
     Processes a 1-dimensional .fits spectrum using ALFA.
     
     Args:
     specFile    absolute path to a 1 dimensional .fits spectrum file
-    ????????????????????????????
+    objID       ID of the object corresponding to the 1D spectrum file
     
     Returns:
-    dataDict    dictionary with data keys: redshift; observedWavelength;
-                physicalWavelength; lineFlux; equivalentWidth. Data entries are 
-                either computed or derived using the ALFA program. Or, the dict 
-                is empty if the user skips the spectrum.
+    objDF       Pandas dataframe containing data unique to the current object 
+                (e.g. redshift; flag); will have only one row
+    lineDF      Pandas dataframe containing spectral data for the current object;
+                will have one row per emission line found in the spectrum
                 
     Output Files:
     /fittedspectra              directory holding .png plots of fitted spectra
     1dspec.*.fits.png           a .png Python plot of a fitted spectrum & its lines
     splot.log                   a log of line measurements made in IRAF's splot
                                 (look up 'IRAF splot' for more details)
+    /fittedSpectra
     /ALFAoutput                 directory holding ALFA's output files
     1dspec.*.fits_fit           (from ALFA) fitted spectrum and continuum data
     1dspec.*.fits_lines         (from ALFA) list of fitted lines
@@ -48,7 +49,20 @@ def run1Dspec(specFile, objID, deltaW=0):
     specPath, specName = split(specFile)
     #get the true datapath, which is one directory up
     datapath = join(sep,*(specPath.split(sep)[:-1]))
-
+    '''
+    #extract object name from header... with some string magic
+    try:
+        imheadArr = readFitsHeader(specFile)
+        IDidx = np.where(['OBJECT' in x for x in imheadArr])
+        objID = imheadArr[IDidx]
+        objID = objID[0]
+        objID = objID.split()[2]
+        objID = objID.strip('\'')
+    except:
+        import warnings
+        warnings.warn('Warning - could not read object ID from header')'''
+    
+    
     #directories for output files (create if nonexistent)
     outPath = join(datapath, 'ALFAoutput')
     imagepath = join(datapath, 'fittedspectra')
@@ -169,7 +183,6 @@ def run1Dspec(specFile, objID, deltaW=0):
             ycorr = max(peak+contAvg)/30.
             text = str(i) +'\n('+ str(k) +')'
             ax.annotate(text, xy=(i+xcorr,j+ycorr))
-#        import pdb; pdb.set_trace()
         plt.title('Spectrum ' +specName+ '; object ID ' +objID, size=24)
         plt.xlim(min(specW-100), max(specW+100))
         plt.xlabel(r'wavelength ($\AA$)', size=20)
@@ -331,6 +344,30 @@ def run1Dfrom2D(fpath, apNum):
     '''
     pass
 
+
+def readFitsHeader(fpath):
+    #hacky workaround to get output printed by IRAF's imhead as a string
+    old_stdout = sys.stdout
+    sys.stdout = mystdout = StringIO()
+    iraf.imhead(fpath, longheader='yes')
+    sys.stdout = old_stdout
+
+    #access strings from stdout, and format as a numpy array
+    imheadStr = mystdout.getvalue()
+    imheadStr = imheadStr.split('\n')
+    imheadArr = np.array(imheadStr)
+    return imheadArr
+    
+#    #turn into dict
+#    entryIdx = np.array(['=' in x for x in imheadArr])
+#    imheadArr = imheadArr[entryIdx]
+#    #remove non-dict-like (keep only lines of form "[VARIABLE] = [VALUE]")
+#    #hang on, it's about to get messy
+#    mask = np.where( np.array([x.count('=') for x in imheadArr]) == 1)
+#    imheadArr = imheadArr[mask]
+#    imheadDict = dict([[y.strip(' ') for y in x.split('=')] for x in imheadArr])
+#    return imheadDict
+    
 
 def callALFA(z, winSize, specFile, outPath):
     '''
@@ -585,23 +622,14 @@ def runMultispec(fpath, skyFile=''):
     
     ##Access 2Dspectrum and begin processing.
 
-    #hacky workaround to get output printed by IRAF's imhead as a string
-    old_stdout = sys.stdout
-    sys.stdout = mystdout = StringIO()
-    iraf.imhead(fpath, longheader='yes')
-    sys.stdout = old_stdout
-
-    #access strings from stdout, and format as a numpy array
-    imheadStr = mystdout.getvalue()
-    imheadStr = imheadStr.split('\n')
-    imheadStr = np.array(imheadStr)
-
+    imheadArr = readFitsHeader(fpath)
+    
     #find rows for APID and APNUM (yes, they're different rows)
-    apidx1 = np.where(['APID' in x for x in imheadStr])
-    apidx2 = np.where(['APNUM' in x for x in imheadStr])
+    apidx1 = np.where(['APID' in x for x in imheadArr])
+    apidx2 = np.where(['APNUM' in x for x in imheadArr])
 
-    apIDRows = imheadStr[apidx1]
-    apNumRows = imheadStr[apidx2]
+    apIDRows = imheadArr[apidx1]
+    apNumRows = imheadArr[apidx2]
 
     #split of the different entries in the row...
     apNumRowValues = [x.split('\'') for x in apNumRows]
@@ -621,7 +649,6 @@ def runMultispec(fpath, skyFile=''):
     goodNames = apNames[apFlags]
     
     nSpec = len(goodNums)
-    
     #prompt user to say which spectrum to start on
     while(True):
         try:
@@ -665,9 +692,10 @@ def runMultispec(fpath, skyFile=''):
             if (goodNames == objID).sum() > 1:
                 nameIdx = np.argwhere(goodNames == objID)
                 numDups = len(nameIdx)
-                for x in range(numDups):
-                    goodNames[nameIdx[x]] = objID + 'a'*x
-            
+                for j in range(numDups):
+                    goodNames[nameIdx[j]] = objID + 'a'*j
+#            import pdb; pdb.set_trace()
+
             curAp = int(goodNums[i])
             pad_ap = format(curAp, '04d')
             specName = '1dspec.'+pad_ap+'.fits'
@@ -695,7 +723,7 @@ def runMultispec(fpath, skyFile=''):
             else:
                 f1.write( cur_objDF.to_csv(sep='\t', index=True, header=False) )
                 f2.write( cur_lineDF.to_csv(sep='\t', index=True, header=False) )
-    
+            
     import completion; completion.thanksForPlaying()
     
     import lineRatios
@@ -713,7 +741,7 @@ def runMultispec(fpath, skyFile=''):
 fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
 #skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
-#fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
+fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
 
 objDF, lineDF = runMultispec(fpath, skyFile)
 
