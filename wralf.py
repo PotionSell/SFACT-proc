@@ -7,7 +7,7 @@ import subprocess
 import collections
 import math
 from os.path import isfile, join, splitext, split, exists, sep
-from os import listdir, makedirs
+from os import listdir, makedirs, remove
 from time import sleep
 
 import numpy as np
@@ -20,7 +20,7 @@ from io import StringIO
 from pyraf import iraf
 
 
-def run1Dspec(specFile, objID='----', deltaW=0):
+def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     '''
     Processes a 1-dimensional .fits spectrum using ALFA.
     
@@ -49,23 +49,22 @@ def run1Dspec(specFile, objID='----', deltaW=0):
     specPath, specName = split(specFile)
     #get the true datapath, which is one directory up
     datapath = join(sep,*(specPath.split(sep)[:-1]))
-    '''
-    #extract object name from header... with some string magic
-    try:
-        imheadArr = readFitsHeader(specFile)
-        IDidx = np.where(['OBJECT' in x for x in imheadArr])
-        objID = imheadArr[IDidx]
-        objID = objID[0]
-        objID = objID.split()[2]
-        objID = objID.strip('\'')
-    except:
-        import warnings
-        warnings.warn('Warning - could not read object ID from header')'''
     
+    #extract object ID and field name, if not given (e.g. if using the program
+    #for a single 1D spectrum
+    imheadArr = readFitsHeader(specFile)
+    if not objID:
+        objID = parseImheadArr(imheadArr, key='OBJECT')
+    if not fieldName:
+        fieldName = parseImheadArr(imheadArr, key='MSTITLE')
     
     #directories for output files (create if nonexistent)
-    outPath = join(datapath, 'ALFAoutput')
-    imagepath = join(datapath, 'fittedspectra')
+    outPath = join(datapath, fieldName+'_ALFAoutput')
+    imagepath = join(datapath, fieldName+'_fittedspectra')
+    
+    outFile1 = join(datapath, fieldName+'_globalData.txt')
+    outFile2 = join(datapath, fieldName+'_lineData.txt')
+        
     if not exists(outPath):
         makedirs(outPath)
     if not exists(imagepath):
@@ -131,16 +130,11 @@ def run1Dspec(specFile, objID='----', deltaW=0):
         idx = np.empty(nLines, dtype=int)
         contAvg = np.empty(nLines, dtype=np.float64)    #flux values are very small, so need high precision!
         
+        #lambda function to get the first index in a numpy array (a) that's within a tolerance (tol) of some value (val)
         matchIdx = lambda a,val,tol : np.abs(a-val) <= tol
-#        def firstIndex(a, val, tol):
-#           '''Gets the first index in a numpy array (a) that's within a 
-#            tolerance (tol) of some value (val)'''
-#            idx = (np.abs(a - val) <= tol).argmax()
-#            return idx
-
+        
         for i in range(nLines):
             idx[i] = matchIdx(specW, observeW.iloc[i], disp).argmax()
-#            idx[i] = firstIndex(specW, observeW.iloc[i], disp)
             #idx is close (+-1) to the exact index - this is okay since we only use it for 
             #getting averages across a range of indices anyways
             
@@ -335,17 +329,38 @@ def run1Dspec(specFile, objID='----', deltaW=0):
                 
     lineDF = pd.DataFrame(lineDict, columns=lineCols)
     lineDF.set_index(['objID'], inplace=True)
+    
+    import lineRatios
+    objDF, lineDF = lineRatios.redCorrRatios(objDF, lineDF)
+    
+    ##Prepare output files
+    
+    #make NaNs appear blank when viewing a file. But the blank spaces will still
+    #be filled with NaNs when loaded back into Python (as desired)
+    objDF = objDF.replace('nan','')
+    
+    print('Writing line data for: ' +specFile+ '\n')
+    if not exists(outFile1):
+        with open(outFile1, 'w+') as f1:
+            f1.write( objDF.to_csv(sep='\t', index=True) )
+    else:
+        with open(outFile1, 'a') as f1:
+            f1.write( objDF.to_csv(sep='\t', index=True, header=False) )
+        
+    if not exists(outFile2):
+        with open(outFile2, 'w+') as f2:
+            f2.write( lineDF.to_csv(sep='\t', index=True) )
+    else:
+        with open(outFile2, 'a') as f2:
+            f2.write( lineDF.to_csv(sep='\t', index=True, header=False) )
+    
     return objDF, lineDF
 
 
-def run1Dfrom2D(fpath, apNum):
-    '''
-    Run scopy on a spectrum specified by apNum, and process it with run1Dspec()
-    '''
-    pass
-
-
 def readFitsHeader(fpath):
+    '''
+    CheshireCat: document this!
+    '''
     #hacky workaround to get output printed by IRAF's imhead as a string
     old_stdout = sys.stdout
     sys.stdout = mystdout = StringIO()
@@ -368,6 +383,38 @@ def readFitsHeader(fpath):
 #    imheadDict = dict([[y.strip(' ') for y in x.split('=')] for x in imheadArr])
 #    return imheadDict
     
+
+def parseImheadArr(imheadArr, key, col=2):
+    '''
+    Parses the output of IRAF's imhead packaged as a NumPy array "imheadArr",
+    fetching the value associated with a specified string "key."
+    Uses a lot of string magic, so I didn't want to repeat this often.
+    Assumes the key's value is in column 1 of the header, but this isn't always
+    the case (e.g. object flags are in column 2 of APNUMs)
+    '''
+    try:
+        keyIdx = np.where([key in x for x in imheadArr])
+        value = imheadArr[keyIdx]
+        #if there is only one row matching the key, then take out the string of
+        #the array. Otherwise, we're dealing with multiple matching values, so 
+        #extract all of them
+        if value.size > 1:
+            values = [x.split()[col] for x in value]
+            values = [x.strip('\'') for x in values]
+            return np.array(values)
+        else:
+            value = value[0]
+            value = value.split()[col]
+            value = value.strip('\'')
+            return value
+    except: 
+        import warnings
+        import time
+        warnings.warn('could not read key ' +str(key)+ ' from header; '
+                        'setting prefix to be the current time')
+        value = time.strftime("%m%d%Y")
+        return value
+
 
 def callALFA(z, winSize, specFile, outPath):
     '''
@@ -405,6 +452,9 @@ def promptLine(specFile, specType):
     Helper function - prompts user to measure a line in splot and to provide the
     identity of the measured line, finding both the rest and measured wavelengths.
     
+    This and other helper functions are the only locations where values are 
+    hard-coded, making for easier customizability.
+    
     Provides shortcuts for certain lines, allowing for high precision for rest
     wavelengths.
     
@@ -420,7 +470,7 @@ def promptLine(specFile, specType):
     '''
     ##Obtain measurement of a single line to get spectrum's redshift.
     #set up names and files
-    specPath, _ = split(specFile)
+    specPath, __ = split(specFile)
     logFile = join(specPath, 'splot.log')
     #run splot to let user measure 1 line
     print('\n*****In the splot window, measure one line with a known rest ' \
@@ -489,6 +539,13 @@ def promptLine(specFile, specType):
 
 
 def classifySpectrum():
+    '''
+    Helper function - prompts the user to classify the spectrum based on a 
+    hard-coded reference key.
+    
+    This and other helper functions are the only locations where values are 
+    hard-coded, making for easier customizability.
+    '''
     
     validFlags = [0,1,2,3,4,5,6,17,18,19]
     print('\n*****Identify the spectrum with a flag:')
@@ -535,8 +592,8 @@ def readSplotLog(logFile):
 
 def sparseObjDF(objID, objFlag, splotZ=np.nan):
     '''
-    User wants to skip a spectrum, so create a dataframe with the object ID and 
-    object flag as the only global data.
+    Helper function - called when the user wants to skip a spectrum. Creates a 
+    dataframe with the object ID and object flag as the only global data.
     '''
     objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestID', 'redCoef',
             'redFlag', 'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
@@ -564,8 +621,8 @@ def sparseObjDF(objID, objFlag, splotZ=np.nan):
 
 def sparseLineDF():
     '''
-    User wants to skip a spectrum, so create a line dataframe with empty entries
-    (for consistency, and to get proper output).
+    Helper function - called when the user wants to skip a spectrum. Creates a 
+    line dataframe with empty entries (for consistency, and to get proper output).
     '''
     lineCols = ['objID','lineID','observeW','physicalW','lineZ','flux','sigmaFlux','eqWidth','contAvg','fwhm']
     lineDF = pd.DataFrame(columns=lineCols)
@@ -575,13 +632,15 @@ def sparseLineDF():
 def runMultispec(fpath, skyFile=''):
     '''
     Identifies and measures the wavelengths, fluxes, and equivalent widths of 
-    emission lines in a 2-dimensional set of spectra using Pyraf and ALFA.
+    emission lines in 1D or 2D spectra using Pyraf and ALFA.
     
     Prompts the user to measure and identify one line, via Pyraf's/Iraf's splot,
     in order to derive a redshift to be used in ALFA.
     
+    CheshireCat: update this to reflect the new structure of the whole WRALF
+    
     Args:
-    fpath       absolute path to a 2-dimensional sBased on your recent activity, I'd like to give you a special offer - a one month free upgrade to LinkedIn Premium.Based on your recent activity, I'd like to give you a special offer - a one month free upgrade to LinkedIn Premium.et of spectra .fits file
+    fpath       absolute path to a spectrail .fits file (1D or 2D)
     skyFile     absolute path to a sky spectrum .fits files
     
     Returns:
@@ -601,11 +660,18 @@ def runMultispec(fpath, skyFile=''):
     datapath, basename = split(fpath)
     fname, __ = splitext(basename)
     
-    #get the name of the data field, assuming a fname structure of "[NAME]_[EXTENSION]"
-    fieldName = fname.split('_')[0]
+    #get the name of the data's field from imhead
+    imheadArr = readFitsHeader(fpath)
+    fieldName = parseImheadArr(imheadArr, key='OBJECT')
+    
+    #DANGER: clear out old output files before writing anything
+    outFile1 = join(datapath, fieldName+'_globalData.txt')
+    outFile2 = join(datapath, fieldName+'_lineData.txt')
+    remove(outFile1)
+    remove(outFile2)
     
     #directories for output files (create if nonexistent)
-    specPath = join(datapath, '1dspectra')
+    specPath = join(datapath, fieldName+'_1dspectra')
     if not exists(specPath):
         makedirs(specPath)
     
@@ -620,36 +686,23 @@ def runMultispec(fpath, skyFile=''):
     else: deltaW = 0
     print('Sky line shift: ', round(deltaW,6), 'Angstroms' )
     
-    ##Access 2Dspectrum and begin processing.
+    ##Access spectrum and begin processing.
 
-    imheadArr = readFitsHeader(fpath)
+    apIDs = parseImheadArr(imheadArr, key='APID')
+    apNums = parseImheadArr(imheadArr, key='APNUM')
+    apFlags = np.array( parseImheadArr(imheadArr, key='APNUM', col=3), dtype=bool)
     
-    #find rows for APID and APNUM (yes, they're different rows)
-    apidx1 = np.where(['APID' in x for x in imheadArr])
-    apidx2 = np.where(['APNUM' in x for x in imheadArr])
-
-    apIDRows = imheadArr[apidx1]
-    apNumRows = imheadArr[apidx2]
-
-    #split of the different entries in the row...
-    apNumRowValues = [x.split('\'') for x in apNumRows]
-    #...and select the part of the row that contains the # and flag...
-    nums = [x[1] for x in apNumRowValues]
-    #...and select only the part containing the #...
-    apNums = np.array( [ x.split()[0] for x in nums ] )
-    #and the part containing the flag
-    apFlags = np.array( [ int( x.split()[1] ) for x in nums ], dtype=bool )
+    if len(apNums) == 1:      #if only 1 aperture number, it's a 1D spectrum
+        objDF, lineDF = run1Dspec(fpath, deltaW=deltaW)
+        return objDF, lineDF
     
-    #also extract object names/IDs
-    apIDRowValues = [x.split('\'') for x in apIDRows]
-    names = [x[1] for x in apIDRowValues]
-    apNames = np.array( [x.split()[0] for x in names] )
+    #otherwise, process as a multispec file
     
     goodNums = apNums[apFlags]
-    goodNames = apNames[apFlags]
+    goodNames = apIDs[apFlags]
     
     nSpec = len(goodNums)
-    #prompt user to say which spectrum to start on
+    #prompt user for which spectrum to start on
     while(True):
         try:
             startSpec = eval(input('\nThere are ' +str(nSpec)+ ' spectra; press enter to start '
@@ -664,85 +717,52 @@ def runMultispec(fpath, skyFile=''):
             print('Invalid input - please enter an integer between ' +str(1)+ ' and ' +str(nSpec)+ ':\n')
             continue
         break
-
     
-    ##Prepare to write to file. Each spectrum is processed and written with the 
-    ##output file open, so processed data is still written even if the code 
-    ##crashes/escapes. 
-    outName1 = join(datapath, fieldName+'_globalData.txt')
-    outName2 = join(datapath, fieldName+'_lineData.txt')
-    
-    
-    objDF = pd.DataFrame()
-    lineDF = pd.DataFrame()
-    
-    #ensure that data is still written despite errors
-    with open(outName1, 'w+') as f1, open(outName2, 'w+') as f2:
-        start = True
-        for i in range(startSpec-1, nSpec):
+    for i in range(startSpec-1, nSpec):
 #        for i in range(nSpec):
 #        for i in range(39, 42):
-        
-            ##Run scopy to make a file for the current spectrum.
+    
+        ##Run scopy to make a file for the current spectrum.
 
-            objID = goodNames[i]
-            #if different objects have the same objID, add 'a' to the latter duplicates
-            #e.g. three entries of 2018 will become: '2018', '2018a', '2018aa'
-            #This is redundantly called every loop, which could be cleaned up
-            if (goodNames == objID).sum() > 1:
-                nameIdx = np.argwhere(goodNames == objID)
-                numDups = len(nameIdx)
-                for j in range(numDups):
-                    goodNames[nameIdx[j]] = objID + 'a'*j
-#            import pdb; pdb.set_trace()
+        objID = goodNames[i]
+        #if different objects have the same objID, add 'a' to the latter duplicates
+        #e.g. three entries of 2018 will become: '2018', '2018a', '2018aa'
+        #CheshireCat: this is redundantly called every loop, which could be cleaned up.. but it's fast
+        if (goodNames == objID).sum() > 1:
+            nameIdx = np.argwhere(goodNames == objID)
+            numDups = len(nameIdx)
+            for j in range(numDups):
+                goodNames[nameIdx[j]] = objID + 'a'*j
 
-            curAp = int(goodNums[i])
-            pad_ap = format(curAp, '04d')
-            specName = '1dspec.'+pad_ap+'.fits'
-            specFile = join(specPath, specName)
-            iraf.scopy(input=fpath, output=specFile, apertures=curAp, clobber='yes')
-            
-            #need to pause to let the file write
-            sleep(1)
-            
-            ##Process the 1D spectrum.
-            cur_objDF, cur_lineDF = run1Dspec(specFile, objID, deltaW)
+        curAp = int(goodNums[i])
+        pad_ap = format(curAp, '04d')
+        specName = '1dspec.'+pad_ap+'.fits'
+        specFile = join(specPath, specName)
+        iraf.scopy(input=fpath, output=specFile, apertures=curAp, clobber='yes')
         
-            #make NaNs appear blank when viewing a file. But the blank spaces will still
-            #be filled with NaNs when loaded back into Python (as desired)
-            objDF = objDF.replace('nan','')
+        #need to pause to let the file write
+        sleep(1)
         
-            objDF = objDF.append(cur_objDF)
-            lineDF = lineDF.append(cur_lineDF)
-            
-            print('Writing line data for: ' +specFile+ '\n')
-            if start:      #start of the file, so write headers
-                f1.write( cur_objDF.to_csv(sep='\t', index=True) )
-                f2.write( cur_lineDF.to_csv(sep='\t', index=True) )
-                start = False
-            else:
-                f1.write( cur_objDF.to_csv(sep='\t', index=True, header=False) )
-                f2.write( cur_lineDF.to_csv(sep='\t', index=True, header=False) )
-            
+        ##Process the 1D spectrum.
+        cur_objDF, cur_lineDF = run1Dspec(specFile, objID, fieldName, deltaW)
+    
     import completion; completion.thanksForPlaying()
     
-    import lineRatios
-    objDF, lineDF = lineRatios.redCorrRatios(objDF, lineDF)
-    outName3 = join(datapath, fieldName+'_globalData_ratios.txt')
-    objDF.to_csv(outName3, sep='\t', index=True)
-    
+    #old
+    objDF = pd.DataFrame()
+    lineDF = pd.DataFrame()
     return objDF,lineDF
     
-#    #scrape up all the files written by ALFA
-#    allFiles = [f for f in listdir( join(datapath,savefolder) ) if f.endswith('.fits_fit') or f.endswith('.fits_lines')]
-
 
 
 fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
 #skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
-fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
+#fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
 
 objDF, lineDF = runMultispec(fpath, skyFile)
+
+
+#fpath2 = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_1dspectra/1dspec.0003.fits'
 
 
