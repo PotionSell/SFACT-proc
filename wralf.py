@@ -667,8 +667,10 @@ def runMultispec(fpath, skyFile=''):
     #DANGER: clear out old output files before writing anything
     outFile1 = join(datapath, fieldName+'_globalData.txt')
     outFile2 = join(datapath, fieldName+'_lineData.txt')
-    remove(outFile1)
-    remove(outFile2)
+    if exists(outFile1):
+        remove(outFile1)
+    if exists(outFile2):
+        remove(outFile2)
     
     #directories for output files (create if nonexistent)
     specPath = join(datapath, fieldName+'_1dspectra')
