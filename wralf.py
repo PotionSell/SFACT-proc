@@ -64,7 +64,26 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     
     outFile1 = join(datapath, fieldName+'_globalData.txt')
     outFile2 = join(datapath, fieldName+'_lineData.txt')
-        
+    
+    def writeData(objDF, lineDF):
+        '''
+        Save data output to file. If the data is for the first object, write column 
+        headers and data. Otherwise, just append data to the existing columns.
+        '''
+        if not exists(outFile1):
+            with open(outFile1, 'w+') as f1:
+                f1.write( objDF.to_csv(sep='\t', index=True) )
+        else:
+            with open(outFile1, 'a') as f1:
+                f1.write( objDF.to_csv(sep='\t', index=True, header=False) )
+            
+        if not exists(outFile2):
+            with open(outFile2, 'w+') as f2:
+                f2.write( lineDF.to_csv(sep='\t', index=True) )
+        else:
+            with open(outFile2, 'a') as f2:
+                f2.write( lineDF.to_csv(sep='\t', index=True, header=False) )
+    
     if not exists(outPath):
         makedirs(outPath)
     if not exists(imagepath):
@@ -80,6 +99,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
             objFlag = classifySpectrum()
             objDF = sparseObjDF(objID, objFlag)
             lineDF = sparseLineDF()
+            writeData(objDF, lineDF)
             return objDF, lineDF
         
         #adjust for sky line correction
@@ -217,12 +237,14 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
                 objFlag = classifySpectrum()
                 objDF = sparseObjDF(objID, objFlag)
                 lineDF = sparseLineDF()
+                writeData(objDF, lineDF)
                 return objDF, lineDF
             elif redo == 1:
                 #return, ending the function
                 objFlag = classifySpectrum()
                 objDF = sparseObjDF(objID, objFlag, z)
                 lineDF = sparseLineDF()
+                writeData(objDF, lineDF)
                 return objDF, lineDF
             elif redo == 2:
                 good = True
@@ -340,20 +362,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     objDF = objDF.replace('nan','')
     
     print('Writing line data for: ' +specFile+ '\n')
-    if not exists(outFile1):
-        with open(outFile1, 'w+') as f1:
-            f1.write( objDF.to_csv(sep='\t', index=True) )
-    else:
-        with open(outFile1, 'a') as f1:
-            f1.write( objDF.to_csv(sep='\t', index=True, header=False) )
-        
-    if not exists(outFile2):
-        with open(outFile2, 'w+') as f2:
-            f2.write( lineDF.to_csv(sep='\t', index=True) )
-    else:
-        with open(outFile2, 'a') as f2:
-            f2.write( lineDF.to_csv(sep='\t', index=True, header=False) )
-    
+    writeData(objDF, lineDF)
     return objDF, lineDF
 
 
