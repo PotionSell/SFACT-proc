@@ -70,6 +70,12 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         Save data output to file. If the data is for the first object, write column 
         headers and data. Otherwise, just append data to the existing columns.
         '''
+        #set NaN and blank entries to be a null value, -1 (for ease of use with 
+        #other machine languages)
+        import pdb; pdb.set_trace()
+        objDF = objDF.replace('','-1')
+        objDF = objDF.replace('nan','-1')
+        
         if not exists(outFile1):
             with open(outFile1, 'w+') as f1:
                 f1.write( objDF.to_csv(sep='\t', index=True) )
@@ -291,11 +297,11 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     #identify the line with highest SN
     strongestIdx = np.argmax(np.array(SNr))
     strongestID = lineIDs.iloc[strongestIdx]
-                
     #if no lines are above threshold, use the line with highest SN
     if math.isnan(bestZ):
         strongestZ = lineZ.iloc[strongestIdx]
         bestZ = strongestZ
+        bestZstd = -1
     
     objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestID', 'redCoef',
              'redFlag', 'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
@@ -357,10 +363,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     
     ##Prepare output files
     
-    #make NaNs appear blank when viewing a file. But the blank spaces will still
-    #be filled with NaNs when loaded back into Python (as desired)
-    objDF = objDF.replace('nan','')
-    
+    import pdb; pdb.set_trace()
     print('Writing line data for: ' +specFile+ '\n')
     writeData(objDF, lineDF)
     return objDF, lineDF
@@ -599,7 +602,7 @@ def readSplotLog(logFile):
     recentRow = splotData.iloc[-1][:]
     return recentRow
 
-def sparseObjDF(objID, objFlag, splotZ=np.nan):
+def sparseObjDF(objID, objFlag, splotZ=-1):
     '''
     Helper function - called when the user wants to skip a spectrum. Creates a 
     dataframe with the object ID and object flag as the only global data.
