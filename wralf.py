@@ -72,7 +72,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         '''
         #set NaN and blank entries to be a null value, -1 (for ease of use with 
         #other machine languages)
-        import pdb; pdb.set_trace()
+#        import pdb; pdb.set_trace()
         objDF = objDF.replace('','-1')
         objDF = objDF.replace('nan','-1')
         
@@ -363,7 +363,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     
     ##Prepare output files
     
-    import pdb; pdb.set_trace()
+#    import pdb; pdb.set_trace()
     print('Writing line data for: ' +specFile+ '\n')
     writeData(objDF, lineDF)
     return objDF, lineDF
