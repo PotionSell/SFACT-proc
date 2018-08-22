@@ -718,7 +718,7 @@ def runMultispec(fpath, skyFile=''):
     apIDs = np.array( [y for x,y,z in keys] )
     apFlags = np.array( [z for x,y,z in keys], dtype=bool)
     #again, this sorting will only work downstream _iff_ the multispec has correct ordering.
-    #Otherwise, we will have big, unseen problems.
+    #Otherwise, we will have big, unseen problems. 
     
 #    import pdb; pdb.set_trace()
     
