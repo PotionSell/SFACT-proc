@@ -361,7 +361,6 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     objDF, lineDF = lineRatios.redCorrRatios(objDF, lineDF)
     
     ##Prepare output files
-    
     print('Writing line data for: ' +specFile+ '\n')
     writeData(objDF, lineDF)
     return objDF, lineDF
