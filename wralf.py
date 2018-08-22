@@ -72,7 +72,6 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         '''
         #set NaN and blank entries to be a null value, -1 (for ease of use with 
         #other machine languages)
-        import pdb; pdb.set_trace()
         objDF = objDF.replace('','-1')
         objDF = objDF.replace('nan','-1')
         
@@ -363,7 +362,6 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     
     ##Prepare output files
     
-    import pdb; pdb.set_trace()
     print('Writing line data for: ' +specFile+ '\n')
     writeData(objDF, lineDF)
     return objDF, lineDF
@@ -403,7 +401,7 @@ def parseImheadArr(imheadArr, key, col=2):
     Uses a lot of string magic, so I didn't want to repeat this often.
     Assumes the key's value is in column 1 of the header, but this isn't always
     the case (e.g. object flags are in column 2 of APNUMs)
-    '''
+    '''        
     try:
         keyIdx = np.where([key in x for x in imheadArr])
         value = imheadArr[keyIdx]
@@ -705,12 +703,25 @@ def runMultispec(fpath, skyFile=''):
     apIDs = parseImheadArr(imheadArr, key='APID')
     apNums = parseImheadArr(imheadArr, key='APNUM')
     apFlags = np.array( parseImheadArr(imheadArr, key='APNUM', col=3), dtype=bool)
-    
+        
     if len(apNums) == 1:      #if only 1 aperture number, it's a 1D spectrum
         objDF, lineDF = run1Dspec(fpath, deltaW=deltaW)
         return objDF, lineDF
     
     #otherwise, process as a multispec file
+    
+    #sort all the Imhead keys according to ascending aperture number; this is the 
+    #right way to handle a disordered Imheader _only_ if the multispec has correct ordering
+    apNums = list(map(int, apNums))       #first, convert apNums to ints
+    keys = list(zip(apNums, apIDs, apFlags))
+    keys.sort()         #sorts along the first entry, the aperture number
+    apNums = np.array( [x for x,y,z in keys] )
+    apIDs = np.array( [y for x,y,z in keys] )
+    apFlags = np.array( [z for x,y,z in keys], dtype=bool)
+    #again, this sorting will only work downstream _iff_ the multispec has correct ordering.
+    #Otherwise, we will have big, unseen problems.
+    
+#    import pdb; pdb.set_trace()
     
     goodNums = apNums[apFlags]
     goodNames = apIDs[apFlags]
@@ -748,7 +759,7 @@ def runMultispec(fpath, skyFile=''):
             for j in range(numDups):
                 goodNames[nameIdx[j]] = objID + 'a'*j
 
-        curAp = int(goodNums[i])
+        curAp = goodNums[i]
         pad_ap = format(curAp, '04d')
         specName = '1dspec.'+pad_ap+'.fits'
         specFile = join(specPath, specName)
