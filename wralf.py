@@ -19,6 +19,7 @@ import sys
 from io import StringIO
 from pyraf import iraf
 
+nullVal = -9.999999
 
 def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     '''
@@ -72,22 +73,22 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         '''
         #set NaN and blank entries to be a null value, -1 (for ease of use with 
         #other machine languages)
-        objDF = objDF.replace('','-1')
-        objDF = objDF.replace('nan','-1')
-        
+        objDF = objDF.replace('',nullVal)
+        objDF = objDF.replace('nan',nullVal)
+        import pdb; pdb.set_trace()
         if not exists(outFile1):
             with open(outFile1, 'w+') as f1:
-                f1.write( objDF.to_csv(sep='\t', index=True) )
+                f1.write( objDF.to_csv(sep=' ', index=True) )
         else:
             with open(outFile1, 'a') as f1:
-                f1.write( objDF.to_csv(sep='\t', index=True, header=False) )
+                f1.write( objDF.to_csv(sep=' ', index=True, header=False) )
             
         if not exists(outFile2):
             with open(outFile2, 'w+') as f2:
-                f2.write( lineDF.to_csv(sep='\t', index=True) )
+                f2.write( lineDF.to_csv(sep=' ', index=True) )
         else:
             with open(outFile2, 'a') as f2:
-                f2.write( lineDF.to_csv(sep='\t', index=True, header=False) )
+                f2.write( lineDF.to_csv(sep=' ', index=True, header=False) )
     
     if not exists(outPath):
         makedirs(outPath)
@@ -137,14 +138,13 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         rowidx = np.where(~np.isnan(rawLines.sigmaFlux))
         goodLines = rawLines.iloc[rowidx]
 
-        nLines = np.shape(goodLines)[0]
+        nLines = len(goodLines)
         observeW = goodLines['observeW']
         physW = goodLines['physW']
         flux = goodLines['flux']
         sigmaFlux = goodLines['sigmaFlux']
         peak = goodLines['peak']
         fwhm = goodLines['fwhm']
-        
         
         ##Compute equivalent widths.
         
@@ -276,7 +276,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
                 break
 
     ##Prepare output.
-    nLines = len(observeW)
+    
     #apply sky line correction to observed wavelengths
     observeW = observeW - deltaW
     #derive individual line redshifts
@@ -300,9 +300,11 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     if math.isnan(bestZ):
         strongestZ = lineZ.iloc[strongestIdx]
         bestZ = strongestZ
-        bestZstd = -1
+        bestZstd = nullVal
     
-    objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestID', 'redCoef',
+#    objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestID', 'redCoef',
+#             'redFlag', 'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
+    objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'bestID', 'redCoef',
              'redFlag', 'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
     objDict = collections.OrderedDict(
                 {'objID': [objID],
@@ -310,7 +312,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
                 'splotZ': format(z, '0.6f'),
                 'alfaZ': format(bestZ, '0.6f'),
                 'sigmaZ': format(bestZstd, '0.2e'),
-                'nLines': nLines,
+#                'nLines': nLines,
                 'bestID': strongestID,
                 'redCoef': np.nan,
                 'redFlag': np.nan,
@@ -325,7 +327,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     objDF = pd.DataFrame(objDict, columns=objCols)
     objDF.set_index(['objID'], inplace=True)
     objDF['objFlag'] = objDF['objFlag'].astype(int)
-    objDF['nLines'] = objDF['nLines'].astype(int)
+#    objDF['nLines'] = objDF['nLines'].astype(int)
     objDF['bestID'] = objDF['bestID'].astype(int)
     
     lineCols = ['objID','lineID','observeW','physicalW','lineZ','flux','sigmaFlux','eqWidth','contAvg','fwhm']
@@ -599,12 +601,14 @@ def readSplotLog(logFile):
     recentRow = splotData.iloc[-1][:]
     return recentRow
 
-def sparseObjDF(objID, objFlag, splotZ=-1):
+def sparseObjDF(objID, objFlag, splotZ=nullVal):
     '''
     Helper function - called when the user wants to skip a spectrum. Creates a 
     dataframe with the object ID and object flag as the only global data.
     '''
-    objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestID', 'redCoef',
+#    objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestID', 'redCoef',
+#            'redFlag', 'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
+    objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'bestID', 'redCoef',
             'redFlag', 'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
     objDict = collections.OrderedDict(
                 {'objID': [objID],
@@ -612,7 +616,7 @@ def sparseObjDF(objID, objFlag, splotZ=-1):
                 'splotZ': format(splotZ, '0.6f'),
                 'alfaZ': np.nan,
                 'sigmaZ': np.nan,
-                'nLines': np.nan,
+#                'nLines': np.nan,
                 'bestID': np.nan,
                 'redCoef': np.nan,
                 'redFlag': np.nan,
