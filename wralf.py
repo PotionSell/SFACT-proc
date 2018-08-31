@@ -20,6 +20,7 @@ from io import StringIO
 from pyraf import iraf
 
 nullVal = -9.999999
+nullVal2 = np.nan       #not used yet; for testing
 
 def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     '''
@@ -65,7 +66,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
 #    outPath_WRALF = join(datapath, 'WRALFoutput')
     outPath_ALFA = join(outPath_WRALF, fieldName+'_ALFAoutput')
     imagePath = join(outPath_WRALF, fieldName+'_fittedspectra')
-    import pdb; pdb.set_trace()
+    
     outFile1 = join(outPath_WRALF, fieldName+'_globalData.txt')
     outFile2 = join(outPath_WRALF, fieldName+'_lineData.txt')
     #and create a machine-legible file
@@ -96,12 +97,12 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         if not exists(outFile3):
             with open(outFile3, 'w+') as f1:
                 #ditch tabs and blanks for resplendent Fortran users
-                objDF = objDF.replace('',nullVal)
+#                objDF = objDF.replace('',nullVal)
                 objDF = objDF.replace('nan',nullVal)
                 f1.write( objDF.to_csv(sep=' ', index=True) )
         else:
             with open(outFile3, 'a') as f1:
-                objDF = objDF.replace('',nullVal)
+#                objDF = objDF.replace('',nullVal)
                 objDF = objDF.replace('nan',nullVal)
                 f1.write( objDF.to_csv(sep=' ', index=True, header=False) )
     
@@ -331,15 +332,15 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
                 'sigmaZ': format(bestZstd, '0.2e'),
 #                'nLines': nLines,
                 'bestID': strongestID,
-                'redCoef': np.nan,
+                'redCoef': np.nan,        #has to be np.nan for lineRatios
                 'redFlag': np.nan,
 #                'redFlag': int(),
-                'OIII/Hb': np.nan,
-                'OII/Hb': np.nan,
-                'NII/Ha': np.nan,
-                'SII/Ha': np.nan,
-                'NeIII/Hb': np.nan,
-                'NeIII/OII': np.nan,
+                'OIII/Hb': nullVal,
+                'OII/Hb': nullVal,
+                'NII/Ha': nullVal,
+                'SII/Ha': nullVal,
+                'NeIII/Hb': nullVal,
+                'NeIII/OII': nullVal,
                 })
     objDF = pd.DataFrame(objDict, columns=objCols)
     objDF.set_index(['objID'], inplace=True)
@@ -631,19 +632,19 @@ def sparseObjDF(objID, objFlag, splotZ=nullVal):
                 {'objID': [objID],
                 'objFlag': [objFlag],
                 'splotZ': format(splotZ, '0.6f'),
-                'alfaZ': np.nan,
-                'sigmaZ': np.nan,
+                'alfaZ': nullVal,
+                'sigmaZ': nullVal,
 #                'nLines': np.nan,
-                'bestID': np.nan,
-                'redCoef': np.nan,
+                'bestID': nullVal,
+                'redCoef': np.nan,        #has to be np.nan for lineRatios
                 'redFlag': np.nan,
 #                'redFlag': int(),
-                'OIII/Hb': np.nan,
-                'OII/Hb': np.nan,
-                'NII/Ha': np.nan,
-                'SII/Ha': np.nan,
-                'NeIII/Hb': np.nan,
-                'NeIII/OII': np.nan,
+                'OIII/Hb': nullVal,
+                'OII/Hb': nullVal,
+                'NII/Ha': nullVal,
+                'SII/Ha': nullVal,
+                'NeIII/Hb': nullVal,
+                'NeIII/OII': nullVal,
                 })
     objDF = pd.DataFrame(objDict, columns=objCols)
     objDF.set_index(['objID'], inplace=True)

@@ -2,7 +2,8 @@ import math
 import pandas as pd
 import numpy as np
 
-nullEntry
+nullEntry = -1
+numDec = 4      #number of decimal places, for formatting
 
 def redCorrRatios(objDF, lineDF):
 
@@ -52,7 +53,6 @@ def redCorrRatios(objDF, lineDF):
             if redCoef < 0:
                 return obsRatio
             corrRatio = obsRatio * 10**(redCoef * (curveDiffB2-curveDiffB1) )
-#            import pdb; pdb.set_trace()
         return corrRatio
 
 
@@ -72,7 +72,6 @@ def redCorrRatios(objDF, lineDF):
         #look at only the current object's lines
         objLines = lineDF.loc[[i]]      #extra [ ] creates a 1D df, instead of a series
         nLines = len(objLines)
-        
         #skip if the object has zero or one line (which triggers errors if I don't skip it)
         if nLines == 1 or np.isnan(nLines): 
             flag = nullEntry
@@ -129,7 +128,7 @@ def redCorrRatios(objDF, lineDF):
         OIII = 5007
         NeIII = 3869
         
-        numDec = 4      #decimal places
+        
         
         if Halpha in objLines['lineID'].values:
             line1 = Halpha
@@ -171,7 +170,7 @@ def redCorrRatios(objDF, lineDF):
     
     #make NaNs appear blank when viewing a file. But the blank spaces will still
     #be filled with NaNs when loaded back into Python (as desired)
-    objDF = objDF.replace('nan','')
+#    objDF = objDF.replace('nan','')
     return objDF, lineDF
 
 #objDF.to_csv('globalData.txt',sep='\t', index=True)
