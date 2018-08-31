@@ -37,7 +37,7 @@ def redCorrRatios(objDF, lineDF):
         else:
             line2Flux = findLineFlux(line2)
         obsRatio = line2Flux / line1Flux
-        
+#        import pdb; pdb.set_trace()
         if flag == 0:
             corrRatio = obsRatio
         else:
@@ -61,14 +61,14 @@ def redCorrRatios(objDF, lineDF):
 
     for i in objIDs:        
         #look at only the current object's lines
-        objLines = lineDF.loc[i]
+        objLines = lineDF.loc[[i]]      #extra [ ] creates a 1D df, instead of a series
         nLines = len(objLines)
 #        nLines = objDF.loc[i,'nLines']
         
         #skip if the object has zero or one line (which triggers errors if I don't skip it)
         if nLines == 1 or np.isnan(nLines): 
-            flag = nullVal
-            redCoef = nullVal
+            flag = -1
+            redCoef = -1
             objDF.loc[i, 'redCoef'] = redCoef
             objDF.loc[i, 'redFlag'] = flag
             continue
@@ -101,8 +101,8 @@ def redCorrRatios(objDF, lineDF):
 
             redCoef = reddeningCorr(obsRatio, intrRatio, curveDiffB)
         else:   #cry me a river
-            flag = nullVal
-            redCoef = nullVal
+            flag = -1
+            redCoef = -1
 
         #if a coefficient has already been stored, read it in instead
         if not math.isnan(objDF.loc[i, 'redCoef']):

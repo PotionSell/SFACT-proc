@@ -60,11 +60,15 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         fieldName = parseImheadArr(imheadArr, key='MSTITLE')
     
     #directories for output files (create if nonexistent)
-    outPath = join(datapath, fieldName+'_ALFAoutput')
-    imagepath = join(datapath, fieldName+'_fittedspectra')
+    outPath_WRALF = join(datapath, 'WRALFoutput')
+    outPath_ALFA = join(outPath_WRALF, fieldName+'_ALFAoutput')
+    imagePath = join(outPath_WRALF, fieldName+'_fittedspectra')
     
-    outFile1 = join(datapath, fieldName+'_globalData.txt')
-    outFile2 = join(datapath, fieldName+'_lineData.txt')
+    outFile1 = join(outPath_WRALF, fieldName+'_globalData.txt')
+    outFile2 = join(outPath_WRALF, fieldName+'_lineData.txt')
+    #and create a machine-legible file
+    outFile3 = join(outPath_WRALF, fieldName+'_globalData_MR.txt')
+#    import pdb; pdb.set_trace()
     
     def writeData(objDF, lineDF):
         '''
@@ -73,27 +77,38 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         '''
         #set NaN and blank entries to be a null value, -1 (for ease of use with 
         #other machine languages)
-        objDF = objDF.replace('',nullVal)
-        objDF = objDF.replace('nan',nullVal)
-        import pdb; pdb.set_trace()
+
         if not exists(outFile1):
             with open(outFile1, 'w+') as f1:
-                f1.write( objDF.to_csv(sep=' ', index=True) )
+                f1.write( objDF.to_csv(sep='\t', index=True) )
         else:
             with open(outFile1, 'a') as f1:
-                f1.write( objDF.to_csv(sep=' ', index=True, header=False) )
-            
+                f1.write( objDF.to_csv(sep='\t', index=True, header=False) )
+
         if not exists(outFile2):
             with open(outFile2, 'w+') as f2:
-                f2.write( lineDF.to_csv(sep=' ', index=True) )
+                f2.write( lineDF.to_csv(sep='\t', index=True) )
         else:
             with open(outFile2, 'a') as f2:
-                f2.write( lineDF.to_csv(sep=' ', index=True, header=False) )
+                f2.write( lineDF.to_csv(sep='\t', index=True, header=False) )
+        if not exists(outFile3):
+            with open(outFile3, 'w+') as f1:
+                #ditch tabs and blanks for resplendent Fortran users
+                objDF = objDF.replace('',nullVal)
+                objDF = objDF.replace('nan',nullVal)
+                f1.write( objDF.to_csv(sep=' ', index=True) )
+        else:
+            with open(outFile3, 'a') as f1:
+                objDF = objDF.replace('',nullVal)
+                objDF = objDF.replace('nan',nullVal)
+                f1.write( objDF.to_csv(sep=' ', index=True, header=False) )
     
-    if not exists(outPath):
-        makedirs(outPath)
-    if not exists(imagepath):
-        makedirs(imagepath)
+    if not exists(outPath_WRALF):
+        makedirs(outPath_WRALF)
+    if not exists(outPath_ALFA):
+        makedirs(outPath_ALFA)
+    if not exists(imagePath):
+        makedirs(imagePath)
     
     #keep going until the user gets their desired good line measurement
     winSize = 150
@@ -117,11 +132,11 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         print('Redshift of measured line: ', round(z,5), '\n')
 
         ##Call ALFA to fit the spectrum and lines.
-        callALFA(z, winSize, specFile, outPath)
+        callALFA(z, winSize, specFile, outPath_ALFA)
         ##Extract info from ALFA's output for plotting and calculations.
 
         #read in spectral data from ALFA
-        fitFname = join(outPath, specName+'_fit')
+        fitFname = join(outPath_ALFA, specName+'_fit')
         specData = np.genfromtxt(fitFname, skip_header=2)
         specW = specData[:,0]
         specF = specData[:,1]
@@ -129,7 +144,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         contF = specData[:,4]
 
         #read in fitted-line data from ALFA
-        linesFname = join(outPath, specName+'_lines')
+        linesFname = join(outPath_ALFA, specName+'_lines')
         mycols = ['observeW', 'physW', 'flux', 'sigmaFlux', 'peak', 'fwhm']
         rawLines = pd.read_csv(linesFname, sep='\s+', names=mycols)
         #convert to dataframe of floats, ignoring strings
@@ -208,10 +223,10 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         plt.ylabel('flux', size=20)
         plt.legend(loc='upper left', prop={'size': 16})
         
-        plt.savefig( join(imagepath, specName+'.png') )
+        plt.savefig( join(imagePath, specName+'.png') )
         print('The fitted spectrum has been saved in \'fittedspectra.\'\n')
         
-        import pickle; pickle.dump(fig, open( join(imagepath,specName+'.pickle'), 'wb'))
+        import pickle; pickle.dump(fig, open( join(imagePath,specName+'.pickle'), 'wb'))
         plt.ion()
         plt.show()
         
@@ -427,7 +442,7 @@ def parseImheadArr(imheadArr, key, col=2):
         return value
 
 
-def callALFA(z, winSize, specFile, outPath):
+def callALFA(z, winSize, specFile, outPath_ALFA):
     '''
     Internal function for run1Dspec. Calls the Automated-Line-Fitting-Algorithm
     (ALFA) from the command line using determined parameters.
@@ -435,7 +450,7 @@ def callALFA(z, winSize, specFile, outPath):
     Args:
     z           redshift of the spectrum
     specFile    absolute path to the spectrum file
-    outPath     absolute path to the output directory
+    outPath_ALFA absolute path to the output directory
     
     Returns:
     -----
@@ -447,7 +462,7 @@ def callALFA(z, winSize, specFile, outPath):
 
 
     paramStr =  'alfa -ul  -n 0  -vg ' +str(v)+ ' -cw ' +str(winSize)+ \
-                ' -o ' +outPath+ ' -sc' +strongCat+ '-dc' +deepCat+ ' '
+                ' -o ' +outPath_ALFA+ ' -sc' +strongCat+ '-dc' +deepCat+ ' '
     #-ul gets upper limit output; -n specifies normalization (none in this case)
     # -vg specifies velocity guess; -cw specifies the window size
     #-o specifies the path for output files; -sc/-dc specify line catalogs
@@ -672,18 +687,22 @@ def runMultispec(fpath, skyFile=''):
 
     datapath, basename = split(fpath)
     fname, __ = splitext(basename)
+    outPath_WRALF = join(datapath, 'WRALFoutput')
     
     #get the name of the data's field from imhead
     imheadArr = readFitsHeader(fpath)
     fieldName = parseImheadArr(imheadArr, key='OBJECT')
     
     #DANGER: clear out old output files before writing anything
-    outFile1 = join(datapath, fieldName+'_globalData.txt')
-    outFile2 = join(datapath, fieldName+'_lineData.txt')
+    outFile1 = join(outPath_WRALF, fieldName+'_globalData.txt')
+    outFile2 = join(outPath_WRALF, fieldName+'_lineData.txt')
+    outFile3 = join(outPath_WRALF, fieldName+'_globalData_MR.txt')
     if exists(outFile1):
         remove(outFile1)
     if exists(outFile2):
         remove(outFile2)
+    if exists(outFile3):
+        remove(outFile3)
     
     #directories for output files (create if nonexistent)
     specPath = join(datapath, fieldName+'_1dspectra')
