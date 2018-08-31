@@ -48,8 +48,10 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     '''
 
     specPath, specName = split(specFile)
-    #get the true datapath, which is one directory up
-    datapath = join(sep,*(specPath.split(sep)[:-1]))
+#    #get the true datapath, which is one directory up
+#    datapath = join(sep,*(specPath.split(sep)[:-1]))
+
+    outPath_WRALF = join(sep,*(specPath.split(sep)[:-1]))
     
     #extract object ID and field name, if not given (e.g. if using the program
     #for a single 1D spectrum
@@ -60,10 +62,10 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         fieldName = parseImheadArr(imheadArr, key='MSTITLE')
     
     #directories for output files (create if nonexistent)
-    outPath_WRALF = join(datapath, 'WRALFoutput')
+#    outPath_WRALF = join(datapath, 'WRALFoutput')
     outPath_ALFA = join(outPath_WRALF, fieldName+'_ALFAoutput')
     imagePath = join(outPath_WRALF, fieldName+'_fittedspectra')
-    
+    import pdb; pdb.set_trace()
     outFile1 = join(outPath_WRALF, fieldName+'_globalData.txt')
     outFile2 = join(outPath_WRALF, fieldName+'_lineData.txt')
     #and create a machine-legible file
@@ -705,7 +707,7 @@ def runMultispec(fpath, skyFile=''):
         remove(outFile3)
     
     #directories for output files (create if nonexistent)
-    specPath = join(datapath, fieldName+'_1dspectra')
+    specPath = join(outPath_WRALF, fieldName+'_1dspectra')
     if not exists(specPath):
         makedirs(specPath)
     
