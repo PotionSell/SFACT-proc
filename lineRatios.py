@@ -9,12 +9,12 @@ def redCorrRatios(objDF, lineDF):
 
     '''
     To be updated...
-    intrRatio   ratio between the intrinsic flux of the chosen line and 
+    intrRatio   ratio between the intrinsic flux of the chosen line and
                 reference Hbeta line
-    curveDiffBB    difference in reddening curve flux between the wavelengths of 
+    curveDiffBB    difference in reddening curve flux between the wavelengths of
                 the chosen line and reference Hbeta line
-    
-    If the computed reddening coefficient is negative, then it is recorded in the 
+
+    If the computed reddening coefficient is negative, then it is recorded in the
     output but is NOT used for correcting the line ratios.
     '''
     nullVal = -9.999999
@@ -42,6 +42,13 @@ def redCorrRatios(objDF, lineDF):
             line2Flux = sumFlux
         else:
             line2Flux = findLineFlux(line2)
+
+        #multiply by a flat value, so that machine precision uncertainties for
+        #small numbers is avoided
+        scale = 10E6
+        line2Flux = line2Flux*scale
+        line1Flux = line1Flux*scale
+        #the scale divides out in the ratio
         obsRatio = line2Flux / line1Flux
 #        import pdb; pdb.set_trace()
         if flag == nullEntry:
@@ -64,43 +71,43 @@ def redCorrRatios(objDF, lineDF):
     lineID_DF = pd.read_csv('lines.csv', sep='\t')
 
     objIDs = objDF.index
-    
+
     #testIDs = ['1627','217','Dot']
     #for i in testIDs:
 
-    for i in objIDs:        
+    for i in objIDs:
         #look at only the current object's lines
         objLines = lineDF.loc[[i]]      #extra [ ] creates a 1D df, instead of a series
         nLines = len(objLines)
         #skip if the object has zero or one line (which triggers errors if I don't skip it)
-        if nLines == 1 or np.isnan(nLines): 
+        if nLines == 1 or np.isnan(nLines):
             flag = nullEntry
             redCoef = nullEntry
             objDF.loc[i, 'redCoef'] = redCoef
             objDF.loc[i, 'redFlag'] = flag
             continue
-        
+
         #Halpha detected
         if Halpha in objLines['lineID'].values and Hbeta in objLines['lineID'].values:
             line = Halpha
             obsFlux = findLineFlux(line)
             intrRatio = 2.86        #Halpha:Hbeta
             flag = 1
-            
+
             curveDiffB = findLineCurveDiff(line)
 
             HbetaFlux = findLineFlux(Hbeta)
             obsRatio = float(obsFlux / HbetaFlux)
 
             redCoef = reddeningCorr(obsRatio, intrRatio, curveDiffB)
-            
+
         #OIII detected
         elif Hgamma in objLines['lineID'].values and Hbeta in objLines['lineID'].values:
             line = Hgamma
             obsFlux = findLineFlux(line)
             intrRatio = 0.47        #Hgamma:Hbeta
             flag = 2
-            
+
             curveDiffB = findLineCurveDiff(line)
 
             HbetaFlux = findLineFlux(Hbeta)
@@ -118,7 +125,7 @@ def redCorrRatios(objDF, lineDF):
         else:
             objDF.loc[i, 'redCoef'] = np.round( redCoef, numDec )
             objDF.loc[i, 'redFlag'] = np.round( flag, numDec )
-        
+
         ##Compute line ratios
         NII = 6584
         SII_1 = 6716
@@ -127,9 +134,9 @@ def redCorrRatios(objDF, lineDF):
         OII_2 = 3729
         OIII = 5007
         NeIII = 3869
-        
-        
-        
+
+
+
         if Halpha in objLines['lineID'].values:
             line1 = Halpha
             if NII in objLines['lineID'].values:
@@ -141,7 +148,7 @@ def redCorrRatios(objDF, lineDF):
                 line3 = SII_2
                 corrRatio = computeRatio(flag,line1,line2,line3)
                 objDF.loc[i, 'SII/Ha'] = np.round(np.log10(corrRatio), numDec)
-                
+
         if Hbeta in objLines['lineID'].values:
             line1 = Hbeta
             if OIII in objLines['lineID'].values:
@@ -157,7 +164,7 @@ def redCorrRatios(objDF, lineDF):
                 line2 = NeIII
                 corrRatio = computeRatio(flag,line1,line2)
                 objDF.loc[i, 'NeIII/Hb'] = np.round(np.log10(corrRatio), numDec)
-        
+
         if NeIII in objLines['lineID'].values and OII_1 in objLines['lineID'].values and OII_2 in objLines['lineID'].values:
             #line1 = OII
             #line2 = NeIII
@@ -167,7 +174,7 @@ def redCorrRatios(objDF, lineDF):
             corrRatio = 1. / computeRatio(flag,line1,line2,line3)
             objDF.loc[i, 'NeIII/OII'] = np.round(np.log10(corrRatio), numDec)
     objDF['redFlag'] = objDF['redFlag'].astype(int)
-    
+
     #make NaNs appear blank when viewing a file. But the blank spaces will still
     #be filled with NaNs when loaded back into Python (as desired)
 #    objDF = objDF.replace('nan','')

@@ -25,17 +25,17 @@ nullVal2 = np.nan       #not used yet; for testing
 def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     '''
     Processes a 1-dimensional .fits spectrum using ALFA.
-    
+
     Args:
     specFile    absolute path to a 1 dimensional .fits spectrum file
     objID       ID of the object corresponding to the 1D spectrum file
-    
+
     Returns:
-    objDF       Pandas dataframe containing data unique to the current object 
+    objDF       Pandas dataframe containing data unique to the current object
                 (e.g. redshift; flag); will have only one row
     lineDF      Pandas dataframe containing spectral data for the current object;
                 will have one row per emission line found in the spectrum
-                
+
     Output Files:
     /fittedspectra              directory holding .png plots of fitted spectra
     1dspec.*.fits.png           a .png Python plot of a fitted spectrum & its lines
@@ -53,7 +53,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
 #    datapath = join(sep,*(specPath.split(sep)[:-1]))
 
     outPath_WRALF = join(sep,*(specPath.split(sep)[:-1]))
-    
+
     #extract object ID and field name, if not given (e.g. if using the program
     #for a single 1D spectrum
     imheadArr = readFitsHeader(specFile)
@@ -61,24 +61,24 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         objID = parseImheadArr(imheadArr, key='OBJECT')
     if not fieldName:
         fieldName = parseImheadArr(imheadArr, key='MSTITLE')
-    
+
     #directories for output files (create if nonexistent)
 #    outPath_WRALF = join(datapath, 'WRALFoutput')
     outPath_ALFA = join(outPath_WRALF, fieldName+'_ALFAoutput')
     imagePath = join(outPath_WRALF, fieldName+'_fittedspectra')
-    
+
     outFile1 = join(outPath_WRALF, fieldName+'_globalData.txt')
     outFile2 = join(outPath_WRALF, fieldName+'_lineData.txt')
     #and create a machine-legible file
     outFile3 = join(outPath_WRALF, fieldName+'_globalData_MR.txt')
 #    import pdb; pdb.set_trace()
-    
+
     def writeData(objDF, lineDF):
         '''
-        Save data output to file. If the data is for the first object, write column 
+        Save data output to file. If the data is for the first object, write column
         headers and data. Otherwise, just append data to the existing columns.
         '''
-        #set NaN and blank entries to be a null value, -1 (for ease of use with 
+        #set NaN and blank entries to be a null value, -1 (for ease of use with
         #other machine languages)
 
         if not exists(outFile1):
@@ -105,32 +105,32 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
 #                objDF = objDF.replace('',nullVal)
                 objDF = objDF.replace('nan',nullVal)
                 f1.write( objDF.to_csv(sep=' ', index=True, header=False) )
-    
+
     if not exists(outPath_WRALF):
         makedirs(outPath_WRALF)
     if not exists(outPath_ALFA):
         makedirs(outPath_ALFA)
     if not exists(imagePath):
         makedirs(imagePath)
-    
+
     #keep going until the user gets their desired good line measurement
     winSize = 150
     good = True
     while(good):
         userW, restW, skip = promptLine(specFile, 'science')
-        
+
         if skip:
             objFlag = classifySpectrum()
             objDF = sparseObjDF(objID, objFlag)
             lineDF = sparseLineDF()
             writeData(objDF, lineDF)
             return objDF, lineDF
-        
+
         #adjust for sky line correction
         userW = userW - deltaW
-        
+
         z = userW / restW - 1.
-        
+
         print('\nWavelength of measured line: ', userW)
         print('Redshift of measured line: ', round(z,5), '\n')
 
@@ -163,46 +163,51 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         sigmaFlux = goodLines['sigmaFlux']
         peak = goodLines['peak']
         fwhm = goodLines['fwhm']
-        
+
         ##Compute equivalent widths.
-        
-        #get indices of lines in the spectrum vector, and find the average 
+
+        #get indices of lines in the spectrum vector, and find the average
         #continuum around each
         disp = 1.4076
         numFWHM = 2.5
         idx = np.empty(nLines, dtype=int)
         contAvg = np.empty(nLines, dtype=np.float64)    #flux values are very small, so need high precision!
-        
-        #lambda function to get the first index in a numpy array (a) that's within a tolerance (tol) of some value (val)
+
+        #in-line function to get the first index in a numpy array (a) that's within a tolerance (tol) of some value (val)
         matchIdx = lambda a,val,tol : np.abs(a-val) <= tol
-        
+
         for i in range(nLines):
             idx[i] = matchIdx(specW, observeW.iloc[i], disp).argmax()
-            #idx is close (+-1) to the exact index - this is okay since we only use it for 
+            #idx is close (+-1) to the exact index - this is okay since we only use it for
             #getting averages across a range of indices anyways
-            
+
             idxRange = int(np.rint( fwhm.iloc[i] * numFWHM / disp / 2))
             idxWindow = [idx[i]-idxRange, idx[i]+idxRange]
-            
+
             contAvg[i] = np.mean( contF[ idxWindow[0] : idxWindow[1] ] )
         eqWidth = np.array(flux / contAvg)
 
 
         ##Create spectrum plot.
-        
+
+        #****Use the following line when making unmarked/unfitted spectra for a poster****
+#        cleanFig = cleanSpecPlot(specW, specF, objID, imagePath, specName)
+
         #create plot size depending on user's monitor
         #window = plt.get_current_fig_manager().window
         #screenX, screenY = window.wm_maxsize()
         #dpi = 100
         #fig = plt.figure( figsize=( int(screenX/dpi/1.5), int(screenY/dpi/1.2)),dpi=dpi )
-        fig = plt.figure(figsize=(14,8))
-        
-        #manually add toolbar
+#        fig = plt.figure(figsize=(14,8))
+        fig = plt.figure(figsize=(25,15))
+
+        #manually add toolbar - note: not currently desired since a toolbar is still already loaded by default
         #from matplotlib.backends.backend_tkagg import NavigationToolbar2TkAgg as NavigationToolbar
         #win = fig.canvas.manager.window
         #canvas = fig.canvas
         #toolbar = NavigationToolbar(canvas, win)
 
+        #plot original data, and fitted continuum
         plt.plot(specW, specF, c='grey', label='original spectrum')
         plt.plot(specW, contF, c='black', ls='--', label='continuum fit')
 
@@ -211,34 +216,53 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         for i in range(nLines):
             plt.axvline(x=observeW.iloc[i], c='lightgrey', ls='--')
 
-        #label peak line fluxes, individually with wavelength info
+        #label peak line fluxes, individually with markers of wavelength info
         plt.plot(observeW, peak + contAvg, 'o', c='orchid', label='estimated line peak')
+#        posterSizes = [16,24,20,20]
+        posterSizes = [20,36,24,24]     #font sizes suitable for a poster
+
         for i, j, k in zip(observeW, peak+contAvg, physW):
-            #shift the labels a bit by a correction so they aren't on top of 
+            #shift the labels a bit by a correction so they aren't on top of
             #data points. Shift is intelligently scaled to the axis size.
             xcorr = max(observeW)/-100.
-            ycorr = max(peak+contAvg)/30.
-            text = str(i) +'\n('+ str(k) +')'
-            ax.annotate(text, xy=(i+xcorr,j+ycorr))
-        plt.title('Spectrum ' +specName+ '; object ID ' +objID, size=24)
+            ycorr = max(peak+contAvg)/80.
+
+            #create labels:
+            #old marker format: has both rest and observed wavelengths
+#            text = str(i) +'\n('+ str(k) +')'
+            #new, cleaner format: has only rest wavelengths
+            text = '\n('+ format(k,'.0f') +')'
+            ax.annotate(text, xy=(i+xcorr,j+ycorr),size=posterSizes[0])
+
+        titleStr = 'Spectrum ' +specName+ '; object ID ' +objID+ '; Redshift = ' +format(z,'0.3f')
+        plt.title(titleStr, size=posterSizes[1])
+
         plt.xlim(min(specW-100), max(specW+100))
-        plt.xlabel(r'wavelength ($\AA$)', size=20)
-        plt.ylabel('flux', size=20)
-        plt.legend(loc='upper left', prop={'size': 16})
-        
+        plt.xlabel(r'wavelength ($\AA$)', size=posterSizes[3])
+        plt.ylabel('normalized flux', size=posterSizes[3])
+        plt.xticks(fontsize=16)
+        plt.yticks(fontsize=16)
+
+        plt.legend(loc='upper left', prop={'size': posterSizes[3]})
+
         plt.savefig( join(imagePath, specName+'.png') )
         print('The fitted spectrum has been saved in \'fittedspectra.\'\n')
-        
+
+        #save the spectrum plot figure as raw pickle files, to be imported by user if needed
         import pickle; pickle.dump(fig, open( join(imagePath,specName+'.pickle'), 'wb'))
         plt.ion()
         plt.show()
-        
-        #Check if user wants to redo the line selection and ALFA call.
+
+        #pad objID with spaces, if needed, to make output cleaner. Might want
+        #to make this a separate variable, in case i need the original form after this assignment..
+        objID = objID.ljust(4)
+
+        ##Check if user wants to redo the line selection and ALFA call.
         #if they redo, then break to the main loop and try again
         #if they skip, then break to the main loop and do not try again, returning basic global data
         #if they keep, then break to the main loop and do not try again
         while(True):     #loop until user gives valid input
-            try: 
+            try:
                 validRedo = [0,1,2,3]
                 redo = eval(input(
                             '*****The spectrum has been analyzed. Enter:\n'
@@ -251,10 +275,10 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
             except (ValueError, NameError, SyntaxError):     #user gives non-integer input
                 print('Invalid input - please enter 0, 1, 2, or 3:\n')
                 continue
-            if redo not in validRedo: 
+            if redo not in validRedo:
                 print('Invalid input - please enter 0, 1, 2, or 3:\n')
                 continue
-            
+
             elif redo == 0:
                 #return, ending the function
                 objFlag = classifySpectrum()
@@ -286,7 +310,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
                         print('Invalid input - please enter an integer window size:\n')
                         continue
                     break
-                
+
                 break
             elif redo == 3:
                 good = False
@@ -294,24 +318,24 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
                 break
 
     ##Prepare output.
-    
+
     #apply sky line correction to observed wavelengths
     observeW = observeW - deltaW
     #derive individual line redshifts
     lineZ = observeW/physW - 1.
-    
+
     #compute an average redshift from data above a threshold SN ratio
     SNr = flux/sigmaFlux
     SNthres = 5.
     goodIdx = np.where(SNr >= SNthres)
     bestZ = np.mean(lineZ.iloc[goodIdx])
     bestZstd = np.std(lineZ.iloc[goodIdx])
-    
+
     #assign line IDs
     lineIDs = physW.round(0)
     lineIDs = lineIDs.astype(int)
-    
-    #identify the line with highest SN
+
+    #identify the line with highest SN -- no longer used in output BSC 100218
     strongestIdx = np.argmax(np.array(SNr))
     strongestID = lineIDs.iloc[strongestIdx]
     #if no lines are above threshold, use the line with highest SN
@@ -319,7 +343,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         strongestZ = lineZ.iloc[strongestIdx]
         bestZ = strongestZ
         bestZstd = nullVal
-    
+
 #    objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestID', 'redCoef',
 #             'redFlag', 'OIII/Hb', 'OII/Hb', 'NII/Ha', 'SII/Ha', 'NeIII/Hb', 'NeIII/OII']
     objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'bestID', 'redCoef',
@@ -331,8 +355,9 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
                 'alfaZ': format(bestZ, '0.6f'),
                 'sigmaZ': format(bestZstd, '0.2e'),
 #                'nLines': nLines,
-                'bestID': strongestID,
-                'redCoef': np.nan,        #has to be np.nan for lineRatios
+#                'bestID': strongestID,
+                'bestID': int(restW),
+                'redCoef': np.nan,        #has to be np.nan in order for lineRatios to work
                 'redFlag': np.nan,
 #                'redFlag': int(),
                 'OIII/Hb': nullVal,
@@ -347,11 +372,11 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     objDF['objFlag'] = objDF['objFlag'].astype(int)
 #    objDF['nLines'] = objDF['nLines'].astype(int)
     objDF['bestID'] = objDF['bestID'].astype(int)
-    
+
     lineCols = ['objID','lineID','observeW','physicalW','lineZ','flux','sigmaFlux','eqWidth','contAvg','fwhm']
-    
+
     #god-awful, clunky re-formatting since there's just no good way to do this with pandas or numpy
-    pd.options.mode.chained_assignment = None  # default='warn' - to mute the following warnings
+    pd.options.mode.chained_assignment = None  # default='warn' - to mute the following irrelevant warnings
     for i in range(nLines):
         observeW.iloc[i] = format( np.array(observeW)[i], '0.3f')
         lineZ.iloc[i] = format( np.array(lineZ)[i], '0.6f')
@@ -360,9 +385,9 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         eqWidth[i] = format( np.array(eqWidth)[i], '0.3f')
         contAvg[i] = format( np.array(contAvg)[i], '0.3e')
         fwhm.iloc[i] = format( np.array(fwhm)[i], '0.3f')
-        
+
     lineDict = collections.OrderedDict(
-                {'objID': [objID]*nLines,
+                {'objID': [objID]*nLines,       #one line per emission line
                 'lineID': lineIDs,
                 'observeW': np.array(observeW),
                 'physicalW': np.array(physW),
@@ -373,13 +398,13 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
                 'contAvg': contAvg,
                 'fwhm': np.array(fwhm),
                 })
-                
+
     lineDF = pd.DataFrame(lineDict, columns=lineCols)
     lineDF.set_index(['objID'], inplace=True)
-    
+
     import lineRatios
     objDF, lineDF = lineRatios.redCorrRatios(objDF, lineDF)
-    
+
     ##Prepare output files
     print('Writing line data for: ' +specFile+ '\n')
     writeData(objDF, lineDF)
@@ -401,7 +426,7 @@ def readFitsHeader(fpath):
     imheadStr = imheadStr.split('\n')
     imheadArr = np.array(imheadStr)
     return imheadArr
-    
+
 #    #turn into dict
 #    entryIdx = np.array(['=' in x for x in imheadArr])
 #    imheadArr = imheadArr[entryIdx]
@@ -411,7 +436,7 @@ def readFitsHeader(fpath):
 #    imheadArr = imheadArr[mask]
 #    imheadDict = dict([[y.strip(' ') for y in x.split('=')] for x in imheadArr])
 #    return imheadDict
-    
+
 
 def parseImheadArr(imheadArr, key, col=2):
     '''
@@ -420,12 +445,12 @@ def parseImheadArr(imheadArr, key, col=2):
     Uses a lot of string magic, so I didn't want to repeat this often.
     Assumes the key's value is in column 1 of the header, but this isn't always
     the case (e.g. object flags are in column 2 of APNUMs)
-    '''        
+    '''
     try:
         keyIdx = np.where([key in x for x in imheadArr])
         value = imheadArr[keyIdx]
         #if there is only one row matching the key, then take out the string of
-        #the array. Otherwise, we're dealing with multiple matching values, so 
+        #the array. Otherwise, we're dealing with multiple matching values, so
         #extract all of them
         if value.size > 1:
             values = [x.split()[col] for x in value]
@@ -436,7 +461,7 @@ def parseImheadArr(imheadArr, key, col=2):
             value = value.split()[col]
             value = value.strip('\'')
             return value
-    except: 
+    except:
         import warnings
         import time
         warnings.warn('could not read key ' +str(key)+ ' from header; '
@@ -449,16 +474,16 @@ def callALFA(z, winSize, specFile, outPath_ALFA):
     '''
     Internal function for run1Dspec. Calls the Automated-Line-Fitting-Algorithm
     (ALFA) from the command line using determined parameters.
-    
+
     Args:
     z           redshift of the spectrum
     specFile    absolute path to the spectrum file
     outPath_ALFA absolute path to the output directory
-    
+
     Returns:
     -----
     '''
-    
+
     v = z * 299792	#km/s
     strongCat = ' optical_strongCustom.cat '
     deepCat = ' optical_deepCustom.cat '
@@ -480,21 +505,21 @@ def promptLine(specFile, specType):
     '''
     Helper function - prompts user to measure a line in splot and to provide the
     identity of the measured line, finding both the rest and measured wavelengths.
-    
-    This and other helper functions are the only locations where values are 
+
+    This and other helper functions are the only locations where values are
     hard-coded, making for easier customizability.
-    
+
     Provides shortcuts for certain lines, allowing for high precision for rest
     wavelengths.
-    
+
     Args:
     specFile    absolute path to the spectrum file
     specType    type of spectrum to be measured; either 'sky' or 'science'
-    
+
     Returns:
     restW       rest wavelength of one measured line in the spectrum
     userW       user-measured wavelength of one line in the spectrum, or:
-    [empty]     only if user wants to skip line measuring (because e.g. the 
+    [empty]     only if user wants to skip line measuring (because e.g. the
                 spectrum has no good lines)
     '''
     ##Obtain measurement of a single line to get spectrum's redshift.
@@ -531,7 +556,7 @@ def promptLine(specFile, specType):
             elif key == 3: restW = 3727.53      #OII blend
             else: restW = key
             break
-        
+
         elif specType == 'sky':     #user is measuring sky emission lines
             try:                    #ask for valid input
                 key = eval(input(
@@ -559,7 +584,7 @@ def promptLine(specFile, specType):
             elif key == 6: restW = 6363.88      #OI
             else: restW = key
             break
-    
+
     #read the measured wavelength from the splot log file
     entry = readSplotLog(logFile)
     userW = entry[0]
@@ -569,17 +594,17 @@ def promptLine(specFile, specType):
 
 def classifySpectrum():
     '''
-    Helper function - prompts the user to classify the spectrum based on a 
+    Helper function - prompts the user to classify the spectrum based on a
     hard-coded reference key.
-    
-    This and other helper functions are the only locations where values are 
+
+    This and other helper functions are the only locations where values are
     hard-coded, making for easier customizability.
     '''
-    
+
     validFlags = [0,1,2,3,4,5,6,17,18,19]
     print('\n*****Identify the spectrum with a flag:')
     while(True):     #loop until user gives valid input
-        try: 
+        try:
             objFlag = eval(input(
                             'To flag an object, enter:\n'
                             '0 for mystery\n'
@@ -598,11 +623,11 @@ def classifySpectrum():
         except (ValueError, NameError, SyntaxError):     #user gives non-integer input
             print('Invalid input - please enter a value from the list:\n')
             continue
-        if objFlag not in validFlags: 
+        if objFlag not in validFlags:
             print('Invalid input - please enter a value from the list:\n')
             continue
         break
-    
+
     return objFlag
 
 
@@ -621,7 +646,7 @@ def readSplotLog(logFile):
 
 def sparseObjDF(objID, objFlag, splotZ=nullVal):
     '''
-    Helper function - called when the user wants to skip a spectrum. Creates a 
+    Helper function - called when the user wants to skip a spectrum. Creates a
     dataframe with the object ID and object flag as the only global data.
     '''
 #    objCols = ['objID','objFlag','splotZ','alfaZ', 'sigmaZ', 'nLines', 'bestID', 'redCoef',
@@ -652,7 +677,7 @@ def sparseObjDF(objID, objFlag, splotZ=nullVal):
 
 def sparseLineDF():
     '''
-    Helper function - called when the user wants to skip a spectrum. Creates a 
+    Helper function - called when the user wants to skip a spectrum. Creates a
     line dataframe with empty entries (for consistency, and to get proper output).
     '''
     lineCols = ['objID','lineID','observeW','physicalW','lineZ','flux','sigmaFlux','eqWidth','contAvg','fwhm']
@@ -660,30 +685,59 @@ def sparseLineDF():
     lineDF.set_index(['objID'], inplace=True)
     return lineDF
 
+def cleanSpecPlot(specW, specF, objID, imagePath, specName):
+    '''
+    Generate clean, unfitted plot of a spectrum, similar to IRAF's display.
+    For use mostly for getting figures for posters.
+    '''
+    cleanFig = plt.figure(figsize=(25,15))
+    plt.plot(specW, specF, c='grey', label='original spectrum')
+    ax = plt.gca()
+    ymin, ymax = ax.get_ybound()
+
+    #set up pretty scaling
+    posterSizes = [16,36,24,24]
+    plt.title('Spectrum of object ' +objID, size=posterSizes[1])
+
+    plt.xlim(min(specW-100), max(specW+100))
+    plt.xlabel(r'wavelength ($\AA$)', size=posterSizes[3])
+    plt.ylabel('normalized flux', size=posterSizes[3])
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+
+    #save
+    plt.savefig( join(imagePath, specName+'_clean.png') )
+    print('The fitted spectrum has been saved in \'fittedspectra.\'\n')
+    plt.ion()
+    plt.show()
+
+    return cleanFig
+
+
 def runMultispec(fpath, skyFile=''):
     '''
-    Identifies and measures the wavelengths, fluxes, and equivalent widths of 
+    Identifies and measures the wavelengths, fluxes, and equivalent widths of
     emission lines in 1D or 2D spectra using Pyraf and ALFA.
-    
+
     Prompts the user to measure and identify one line, via Pyraf's/Iraf's splot,
     in order to derive a redshift to be used in ALFA.
-    
+
     CheshireCat: update this to reflect the new structure of the whole WRALF
-    
+
     Args:
     fpath       absolute path to a spectrail .fits file (1D or 2D)
     skyFile     absolute path to a sky spectrum .fits files
-    
+
     Returns:
-    objDF           Pandas dataframe storing global data about each object. 
+    objDF           Pandas dataframe storing global data about each object.
                     One entry per object.
-    lineDF          Pandas dataframe storing data on emission lines in each 
+    lineDF          Pandas dataframe storing data on emission lines in each
                     spectrum. One entry per emission line for each spectrum.
-    
+
     Output Files:
     /1dspectra      directory for 1D spectra generated from the input 2D spectrum
-    1dspec.*.fits   a single 1D spectrum generated from the input 2D spectrum; 
-    globalData.txt  csv output file containing global data about each object for 
+    1dspec.*.fits   a single 1D spectrum generated from the input 2D spectrum;
+    globalData.txt  csv output file containing global data about each object for
                     each spectra that the user does not skip
     lineData.txt    same as above, but contains line data for each object
     '''
@@ -691,11 +745,11 @@ def runMultispec(fpath, skyFile=''):
     datapath, basename = split(fpath)
     fname, __ = splitext(basename)
     outPath_WRALF = join(datapath, 'WRALFoutput')
-    
+
     #get the name of the data's field from imhead
     imheadArr = readFitsHeader(fpath)
     fieldName = parseImheadArr(imheadArr, key='OBJECT')
-    
+
     #DANGER: clear out old output files before writing anything
     outFile1 = join(outPath_WRALF, fieldName+'_globalData.txt')
     outFile2 = join(outPath_WRALF, fieldName+'_lineData.txt')
@@ -706,12 +760,12 @@ def runMultispec(fpath, skyFile=''):
         remove(outFile2)
     if exists(outFile3):
         remove(outFile3)
-    
+
     #directories for output files (create if nonexistent)
     specPath = join(outPath_WRALF, fieldName+'_1dspectra')
     if not exists(specPath):
         makedirs(specPath)
-    
+
     #prepare for sky line adjustments if desired
     if skyFile != '':
         try:
@@ -722,20 +776,20 @@ def runMultispec(fpath, skyFile=''):
         except: deltaW = 0
     else: deltaW = 0
     print('Sky line shift: ', round(deltaW,6), 'Angstroms' )
-    
+
     ##Access spectrum and begin processing.
 
     apIDs = parseImheadArr(imheadArr, key='APID')
     apNums = parseImheadArr(imheadArr, key='APNUM')
     apFlags = np.array( parseImheadArr(imheadArr, key='APNUM', col=3), dtype=bool)
-        
+
     if len(apNums) == 1:      #if only 1 aperture number, it's a 1D spectrum
         objDF, lineDF = run1Dspec(fpath, deltaW=deltaW)
         return objDF, lineDF
-    
+
     #otherwise, process as a multispec file
-    
-    #sort all the Imhead keys according to ascending aperture number; this is the 
+
+    #sort all the Imhead keys according to ascending aperture number; this is the
     #right way to handle a disordered Imheader _only_ if the multispec has correct ordering
     apNums = list(map(int, apNums))       #first, convert apNums to ints
     keys = list(zip(apNums, apIDs, apFlags))
@@ -744,13 +798,13 @@ def runMultispec(fpath, skyFile=''):
     apIDs = np.array( [y for x,y,z in keys] )
     apFlags = np.array( [z for x,y,z in keys], dtype=bool)
     #again, this sorting will only work downstream _iff_ the multispec has correct ordering.
-    #Otherwise, we will have big, unseen problems. 
-    
+    #Otherwise, we will have big, unseen problems.
+
 #    import pdb; pdb.set_trace()
-    
+
     goodNums = apNums[apFlags]
     goodNames = apIDs[apFlags]
-    
+
     nSpec = len(goodNums)
     #prompt user for which spectrum to start on
     while(True):
@@ -767,11 +821,11 @@ def runMultispec(fpath, skyFile=''):
             print('Invalid input - please enter an integer between ' +str(1)+ ' and ' +str(nSpec)+ ':\n')
             continue
         break
-    
+
     for i in range(startSpec-1, nSpec):
 #        for i in range(nSpec):
 #        for i in range(39, 42):
-    
+
         ##Run scopy to make a file for the current spectrum.
 
         objID = goodNames[i]
@@ -789,26 +843,26 @@ def runMultispec(fpath, skyFile=''):
         specName = '1dspec.'+pad_ap+'.fits'
         specFile = join(specPath, specName)
         iraf.scopy(input=fpath, output=specFile, apertures=curAp, clobber='yes')
-        
+
         #need to pause to let the file write
         sleep(1)
-        
+
         ##Process the 1D spectrum.
         cur_objDF, cur_lineDF = run1Dspec(specFile, objID, fieldName, deltaW)
-    
+
     import completion; completion.thanksForPlaying()
-    
-    #old
+
+    #old/outdated return statements (what were they for??)
     objDF = pd.DataFrame()
     lineDF = pd.DataFrame()
     return objDF,lineDF
-    
+
 
 
 fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
 #skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
-#fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
+fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
 
 objDF, lineDF = runMultispec(fpath, skyFile)
 
