@@ -862,7 +862,7 @@ def runMultispec(fpath, skyFile=''):
 fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
 #skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
-fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
+#fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
 
 objDF, lineDF = runMultispec(fpath, skyFile)
 
