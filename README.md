@@ -43,9 +43,8 @@ In standard use, the program structure is as follows:
 identities, fluxes, and equivalent widths
 5) the continuum and emission lines are displayed and saved via Matplotlib
 6) the user can then remeasure the spectrum, or keep ALFA's estimates. If kept, the estimates and other data are packaged in 
-Pandas dataframes
-7) steps 1-4 are repeated for each spectrum
-8) data is written into two files
-9) emission line data is used to compute reddening coefficients and corrected line ratios; this is also saved to file
+Pandas dataframes, and are saved to file
+7) emission line data is used to compute reddening coefficients and corrected line ratios; this is also saved to file
+8) steps 3-7 are repeated for each spectrum
 
 (more documentation soon to follow)
