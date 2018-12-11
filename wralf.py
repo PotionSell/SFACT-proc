@@ -140,6 +140,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
 
         #read in spectral data from ALFA
         fitFname = join(outPath_ALFA, specName+'_fit')
+
         specData = np.genfromtxt(fitFname, skip_header=2)
         specW = specData[:,0]
         specF = specData[:,1]
@@ -413,7 +414,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
 
 def readFitsHeader(fpath):
     '''
-    CheshireCat: document this!
+    BSC todo: document this!
     '''
     #hacky workaround to get output printed by IRAF's imhead as a string
     old_stdout = sys.stdout
@@ -635,13 +636,27 @@ def readSplotLog(logFile):
     '''Helper function to read a splot log file, and extract the most recent entry'''
     #read splot.log to get the wavelength measured by user in splot
     cols = ['center','cont','flux','eqw','core','gfwhm','lfwhm']
-    splotData = pd.read_table( logFile, names=cols, keep_default_na=False, sep='\s+' )
+
+    goodCols = [0,1,2,3,4,5,6]
+    #import pdb; pdb.set_trace()
+
+    #splotData = pd.read_table( logFile, names=cols, usecols=goodCols, keep_default_na=False, skiprows=1, sep='\s+' )
+    splotData = pd.read_table( logFile, names=cols, keep_default_na=False, skiprows=2, sep='\s+' )
+    #explaining these parameters:
+    #names: the names of the columns to read from the file
+    #skiprows: skip the first chunk of the log file, to avoid issues with the
+              #header (such as extra entries, like RA or DEC)
+    #usecols: reads in only the columns that have a name specified by cols; this
+             #avoids problems with unusual splot readouts, such as RA or DEC entries
+             #that would otherwise be read in as new columns and cause an offset in the data read in
+
     #mark the invalid rows...
     splotData = splotData.apply(pd.to_numeric, errors='coerce')
     #...and get rid of them
     splotData = splotData.dropna(subset = ['center'])
     #get the most recent addition to the log file
     recentRow = splotData.iloc[-1][:]
+
     return recentRow
 
 def sparseObjDF(objID, objFlag, splotZ=nullVal):
@@ -722,7 +737,7 @@ def runMultispec(fpath, skyFile=''):
     Prompts the user to measure and identify one line, via Pyraf's/Iraf's splot,
     in order to derive a redshift to be used in ALFA.
 
-    CheshireCat: update this to reflect the new structure of the whole WRALF
+    BSC todo: update this to reflect the new structure of the whole WRALF
 
     Args:
     fpath       absolute path to a spectrail .fits file (1D or 2D)
@@ -831,7 +846,7 @@ def runMultispec(fpath, skyFile=''):
         objID = goodNames[i]
         #if different objects have the same objID, add 'a' to the latter duplicates
         #e.g. three entries of 2018 will become: '2018', '2018a', '2018aa'
-        #CheshireCat: this is redundantly called every loop, which could be cleaned up.. but it's fast
+        #BSC todo: this is redundantly called every loop, which could be cleaned up.. but it's fast
         if (goodNames == objID).sum() > 1:
             nameIdx = np.argwhere(goodNames == objID)
             numDups = len(nameIdx)
@@ -863,6 +878,9 @@ fpath = eval("input('Enter the full path of 2D spectrum fits file: ')")
 skyFile = eval("input('If you want to apply sky line corrections, enter the full path to the sky spectrum. Otherwise, press enter:')")
 #skyFile = '/home/bscousin/iraf/Team_SFACT/hadot055A/skyhadot055A_comb.fits'
 #fpath = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_comb_fin.ms.fits'
+
+#skyFile = '/home/bscousin/AstroResearch/data/SFACT_f03/skysfactf03A_comb.fits'
+#fpath = '/home/bscousin/AstroResearch/data/SFACT_f03/SFACTF03A_SF.ms.fits'
 
 objDF, lineDF = runMultispec(fpath, skyFile)
 
