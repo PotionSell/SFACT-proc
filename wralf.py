@@ -199,8 +199,10 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         #screenX, screenY = window.wm_maxsize()
         #dpi = 100
         #fig = plt.figure( figsize=( int(screenX/dpi/1.5), int(screenY/dpi/1.2)),dpi=dpi )
-#        fig = plt.figure(figsize=(14,8))
-        fig = plt.figure(figsize=(25,15))
+        fig = plt.figure(figsize=(14,8))
+#        fig = plt.figure(figsize=(25,15))
+        posterSizes = [16,24,20,20]
+#        posterSizes = [20,36,24,24]     #font sizes suitable for a poster
 
         #manually add toolbar - note: not currently desired since a toolbar is still already loaded by default
         #from matplotlib.backends.backend_tkagg import NavigationToolbar2TkAgg as NavigationToolbar
@@ -219,8 +221,6 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
 
         #label peak line fluxes, individually with markers of wavelength info
         plt.plot(observeW, peak + contAvg, 'o', c='orchid', label='estimated line peak')
-#        posterSizes = [16,24,20,20]
-        posterSizes = [20,36,24,24]     #font sizes suitable for a poster
 
         for i, j, k in zip(observeW, peak+contAvg, physW):
             #shift the labels a bit by a correction so they aren't on top of
