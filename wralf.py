@@ -117,6 +117,10 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     winSize = 150
     good = True
     while(good):
+
+        #close any previous window for convenience
+        plt.close()
+
         userW, restW, skip = promptLine(specFile, 'science')
 
         if skip:
@@ -201,7 +205,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         #fig = plt.figure( figsize=( int(screenX/dpi/1.5), int(screenY/dpi/1.2)),dpi=dpi )
         fig = plt.figure(figsize=(14,8))
 #        fig = plt.figure(figsize=(25,15))
-        posterSizes = [16,24,20,20]
+        posterSizes = [16,24,20,16]
 #        posterSizes = [20,36,24,24]     #font sizes suitable for a poster
 
         #manually add toolbar - note: not currently desired since a toolbar is still already loaded by default
@@ -244,7 +248,7 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         plt.xticks(fontsize=16)
         plt.yticks(fontsize=16)
 
-        plt.legend(loc='upper left', prop={'size': posterSizes[3]})
+        plt.legend(loc='best', prop={'size': posterSizes[3]})
 
         plt.savefig( join(imagePath, specName+'.png') )
         print('The fitted spectrum has been saved in \'fittedspectra.\'\n')
@@ -548,7 +552,7 @@ def promptLine(specFile, specType):
             except (NameError, ValueError, SyntaxError):
                 print('Invalid input - please enter 0, 1, 2, 3, or a wavelength:\n')
                 continue
-            if key > 3 and key < 2000: continue
+            if key > 3 and key < 100: continue
             #set the wavelength based on input key
             #it would be nice if Python had a switch-statement...
             if key == 0: return ('','',1)      #user wants to skip
@@ -854,15 +858,25 @@ def runMultispec(fpath, skyFile=''):
                 goodNames[nameIdx[j]] = objID + 'a'*j
 
         curAp = goodNums[i]
-        pad_ap = format(curAp, '04d')
-        specName = '1dspec.'+pad_ap+'.fits'
-        specFile = join(specPath, specName)
-        iraf.scopy(input=fpath, output=specFile, apertures=curAp, clobber='yes')
+
+        #run scopy with a default file name - the scopy command then saves a
+        #file using this default name to be 1dspec.00##.fits' for ap number ##
+        scopyName = '1dspec'
+        scopyFile = join(specPath, scopyName)
+#        iraf.scopy(input=fpath, output=specFile, apertures=curAp, clobber='yes')
+        iraf.scopy(input=fpath, output=scopyFile, apertures=curAp, format='onedspec', clobber='yes')
+        #and can then use the specFile var as before -- those this may be redundant
+
 
         #need to pause to let the file write
         sleep(1)
 
         ##Process the 1D spectrum.
+        #pass the path for the 1Dspectrum created by scopy: '1dspec.00##.fits':
+        pad_ap = format(curAp, '04d')
+        specName = '1dspec.'+pad_ap+'.fits'
+        specFile = join(specPath, specName)
+
         cur_objDF, cur_lineDF = run1Dspec(specFile, objID, fieldName, deltaW)
 
     import completion; completion.thanksForPlaying()
