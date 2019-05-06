@@ -808,7 +808,7 @@ def runMultispec(fpath, skyFile=''):
     apNums = parseImheadArr(imheadArr, key='APNUM')
     apFlags = np.array( parseImheadArr(imheadArr, key='APNUM', col=3), dtype=bool)
     
-    if len(apNums) == 1:      #if only 1 aperture number, it's a 1D spectrum
+    if (len(apNums) == 1) or (isinstance(apNums,str)):      #if only 1 aperture number, it's a 1D spectrum
         objDF, lineDF = run1Dspec(fpath, deltaW=deltaW)
         return objDF, lineDF
 
