@@ -14,6 +14,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from matplotlib import rcParams
+rcParams['font.family'] = 'serif'
+
 #packages for Pyraf support:
 import sys
 from io import StringIO
@@ -204,15 +207,9 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         #dpi = 100
         #fig = plt.figure( figsize=( int(screenX/dpi/1.5), int(screenY/dpi/1.2)),dpi=dpi )
         fig = plt.figure(figsize=(14,8))
-#        fig = plt.figure(figsize=(25,15))
-        posterSizes = [16,24,20,16]
+#        fig = plt.figure(figsize=(20,14))
+        posterSizes = [24,24,20,20]
 #        posterSizes = [20,36,24,24]     #font sizes suitable for a poster
-
-        #manually add toolbar - note: not currently desired since a toolbar is still already loaded by default
-        #from matplotlib.backends.backend_tkagg import NavigationToolbar2TkAgg as NavigationToolbar
-        #win = fig.canvas.manager.window
-        #canvas = fig.canvas
-        #toolbar = NavigationToolbar(canvas, win)
 
         #plot original data, and fitted continuum
         plt.plot(specW, specF, c='grey', label='original spectrum')
@@ -243,14 +240,21 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         plt.title(titleStr, size=posterSizes[1])
 
         plt.xlim(min(specW-100), max(specW+100))
-        plt.xlabel(r'wavelength ($\AA$)', size=posterSizes[3])
-        plt.ylabel('normalized flux', size=posterSizes[3])
-        plt.xticks(fontsize=16)
-        plt.yticks(fontsize=16)
+        plt.xlabel(r'wavelength ($\AA$)', size=posterSizes[2])
+        plt.ylabel('normalized flux', size=posterSizes[2])
+        plt.xticks(fontsize=posterSizes[0])
+        plt.yticks(fontsize=posterSizes[0])
 
         plt.legend(loc='best', prop={'size': posterSizes[3]})
 
-        plt.savefig( join(imagePath, specName+'.png') )
+        ###
+        wm = plt.get_current_fig_manager()
+        wm.window.attributes('-topmost', 1)
+        wm.window.attributes('-topmost', 0)
+        ###
+
+
+        plt.savefig( join(imagePath, specName+'.png'),dpi=200 )
         print('The fitted spectrum has been saved in \'fittedspectra.\'\n')
 
         #save the spectrum plot figure as raw pickle files, to be imported by user if needed
@@ -709,23 +713,25 @@ def cleanSpecPlot(specW, specF, objID, imagePath, specName):
     Generate clean, unfitted plot of a spectrum, similar to IRAF's display.
     For use mostly for getting figures for posters.
     '''
-    cleanFig = plt.figure(figsize=(25,15))
+    #cleanFig = plt.figure(figsize=(25,15))
+    cleanFig = plt.figure(figsize=(20,14))
     plt.plot(specW, specF, c='grey', label='original spectrum')
     ax = plt.gca()
     ymin, ymax = ax.get_ybound()
 
     #set up pretty scaling
-    posterSizes = [16,36,24,24]
+    posterSizes = [24,24,20,20]
     plt.title('Spectrum of object ' +objID, size=posterSizes[1])
 
     plt.xlim(min(specW-100), max(specW+100))
-    plt.xlabel(r'wavelength ($\AA$)', size=posterSizes[3])
-    plt.ylabel('normalized flux', size=posterSizes[3])
-    plt.xticks(fontsize=16)
-    plt.yticks(fontsize=16)
+
+    plt.xlabel(r'wavelength ($\AA$)', size=posterSizes[2])
+    plt.ylabel('normalized flux', size=posterSizes[2])
+    plt.xticks(fontsize=posterSizes[0])
+    plt.yticks(fontsize=posterSizes[0])
 
     #save
-    plt.savefig( join(imagePath, specName+'_clean.png') )
+    plt.savefig( join(imagePath, specName+'_clean.png'),dpi=200 )
     print('The fitted spectrum has been saved in \'fittedspectra.\'\n')
     plt.ion()
     plt.show()
@@ -801,7 +807,7 @@ def runMultispec(fpath, skyFile=''):
     apIDs = parseImheadArr(imheadArr, key='APID')
     apNums = parseImheadArr(imheadArr, key='APNUM')
     apFlags = np.array( parseImheadArr(imheadArr, key='APNUM', col=3), dtype=bool)
-
+    
     if len(apNums) == 1:      #if only 1 aperture number, it's a 1D spectrum
         objDF, lineDF = run1Dspec(fpath, deltaW=deltaW)
         return objDF, lineDF
@@ -865,7 +871,7 @@ def runMultispec(fpath, skyFile=''):
         scopyFile = join(specPath, scopyName)
 #        iraf.scopy(input=fpath, output=specFile, apertures=curAp, clobber='yes')
         iraf.scopy(input=fpath, output=scopyFile, apertures=curAp, format='onedspec', clobber='yes')
-        #and can then use the specFile var as before -- those this may be redundant
+        #and can then use the specFile var as before -- though this may be redundant
 
 
         #need to pause to let the file write
