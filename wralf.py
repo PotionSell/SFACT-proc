@@ -25,7 +25,7 @@ from pyraf import iraf
 nullVal = -9.999999
 nullVal2 = np.nan       #not used yet; for testing
 
-def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
+def run1Dspec(specFile, objID, fieldName, deltaW=0):
     '''
     Processes a 1-dimensional .fits spectrum using ALFA.
 
@@ -52,18 +52,9 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     '''
 
     specPath, specName = split(specFile)
-#    #get the true datapath, which is one directory up
-#    datapath = join(sep,*(specPath.split(sep)[:-1]))
 
     outPath_WRALF = join(sep,*(specPath.split(sep)[:-1]))
 
-    #extract object ID and field name, if not given (e.g. if using the program
-    #for a single 1D spectrum
-    imheadArr = readFitsHeader(specFile)
-    if not objID:
-        objID = parseImheadArr(imheadArr, key='OBJECT')
-    if not fieldName:
-        fieldName = parseImheadArr(imheadArr, key='MSTITLE')
 
     #directories for output files (create if nonexistent)
 #    outPath_WRALF = join(datapath, 'WRALFoutput')
@@ -200,16 +191,11 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
 
         #****Use the following line when making unmarked/unfitted spectra for a poster****
 #        cleanFig = cleanSpecPlot(specW, specF, objID, imagePath, specName)
-
-        #create plot size depending on user's monitor
-        #window = plt.get_current_fig_manager().window
-        #screenX, screenY = window.wm_maxsize()
-        #dpi = 100
-        #fig = plt.figure( figsize=( int(screenX/dpi/1.5), int(screenY/dpi/1.2)),dpi=dpi )
+        
         fig = plt.figure(figsize=(14,8))
 #        fig = plt.figure(figsize=(20,14))
-        posterSizes = [24,24,20,20]
-#        posterSizes = [20,36,24,24]     #font sizes suitable for a poster
+        elementSizes = [20,24,20,20]
+#        elementSizes = [20,36,24,24]     #font sizes suitable for a poster
 
         #plot original data, and fitted continuum
         plt.plot(specW, specF, c='grey', label='original spectrum')
@@ -226,26 +212,31 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
         for i, j, k in zip(observeW, peak+contAvg, physW):
             #shift the labels a bit by a correction so they aren't on top of
             #data points. Shift is intelligently scaled to the axis size.
-            xcorr = max(observeW)/-100.
-            ycorr = max(peak+contAvg)/80.
-
-            #create labels:
-            #old marker format: has both rest and observed wavelengths
-#            text = str(i) +'\n('+ str(k) +')'
-            #new, cleaner format: has only rest wavelengths
+            #xcorr = max(observeW)/-100.
+            #ycorr = max(peak+contAvg)/80.
+            xcorr=ycorr=0
+            #cleaner format: has only rest wavelengths
             text = '\n('+ format(k,'.0f') +')'
-            ax.annotate(text, xy=(i+xcorr,j+ycorr),size=posterSizes[0])
+            
+            if len(observeW) < 10: 
+                ax.annotate(text, xy=(i+xcorr,j+ycorr),size=elementSizes[0])
+            else:
+                ax.annotate(text, xy=(i+xcorr,j+ycorr),size=int(elementSizes[0]/1.5))
+
+        #from adjusttext import adjust_text
+        #texts = [ plt.text(i,j, '\n('+ format(k,'.0f') +')' ) for i,j,k in zip(observeW, peak+contAvg, physW)]
+        #adjust_text(texts)
 
         titleStr = 'Spectrum ' +specName+ '; object ID ' +objID+ '; Redshift = ' +format(z,'0.3f')
-        plt.title(titleStr, size=posterSizes[1])
+        plt.title(titleStr, size=elementSizes[1])
 
         plt.xlim(min(specW-100), max(specW+100))
-        plt.xlabel(r'wavelength ($\AA$)', size=posterSizes[2])
-        plt.ylabel('normalized flux', size=posterSizes[2])
-        plt.xticks(fontsize=posterSizes[0])
-        plt.yticks(fontsize=posterSizes[0])
+        plt.xlabel(r'wavelength ($\AA$)', size=elementSizes[2])
+        plt.ylabel('normalized flux', size=elementSizes[2])
+        plt.xticks(fontsize=elementSizes[0])
+        plt.yticks(fontsize=elementSizes[0])
 
-        plt.legend(loc='best', prop={'size': posterSizes[3]})
+        plt.legend(loc='best', prop={'size': elementSizes[3]})
 
         ###
         wm = plt.get_current_fig_manager()
@@ -418,65 +409,6 @@ def run1Dspec(specFile, objID='', fieldName='', deltaW=0):
     print('Writing line data for: ' +specFile+ '\n')
     writeData(objDF, lineDF)
     return objDF, lineDF
-
-
-def readFitsHeader(fpath):
-    '''
-    BSC todo: document this!
-    '''
-    #hacky workaround to get output printed by IRAF's imhead as a string
-    old_stdout = sys.stdout
-    sys.stdout = mystdout = StringIO()
-    iraf.imhead(fpath, longheader='yes')
-    sys.stdout = old_stdout
-
-    #access strings from stdout, and format as a numpy array
-    imheadStr = mystdout.getvalue()
-    imheadStr = imheadStr.split('\n')
-    imheadArr = np.array(imheadStr)
-    return imheadArr
-
-#    #turn into dict
-#    entryIdx = np.array(['=' in x for x in imheadArr])
-#    imheadArr = imheadArr[entryIdx]
-#    #remove non-dict-like (keep only lines of form "[VARIABLE] = [VALUE]")
-#    #hang on, it's about to get messy
-#    mask = np.where( np.array([x.count('=') for x in imheadArr]) == 1)
-#    imheadArr = imheadArr[mask]
-#    imheadDict = dict([[y.strip(' ') for y in x.split('=')] for x in imheadArr])
-#    return imheadDict
-
-
-def parseImheadArr(imheadArr, key, col=2):
-    '''
-    Parses the output of IRAF's imhead packaged as a NumPy array "imheadArr",
-    fetching the value associated with a specified string "key."
-    Uses a lot of string magic, so I didn't want to repeat this often.
-    Assumes the key's value is in column 1 of the header, but this isn't always
-    the case (e.g. object flags are in column 2 of APNUMs)
-    '''
-    try:
-        keyIdx = np.where([key in x for x in imheadArr])
-        value = imheadArr[keyIdx]
-        #if there is only one row matching the key, then take out the string of
-        #the array. Otherwise, we're dealing with multiple matching values, so
-        #extract all of them
-        if value.size > 1:
-            values = [x.split()[col] for x in value]
-            values = [x.strip('\'') for x in values]
-            return np.array(values)
-        else:
-            value = value[0]
-            value = value.split()[col]
-            value = value.strip('\'')
-            return value
-    except:
-        import warnings
-        import time
-        warnings.warn('could not read key ' +str(key)+ ' from header; '
-                        'setting prefix to be the current time')
-        value = time.strftime("%m%d%Y")
-        return value
 
 
 def callALFA(z, winSize, specFile, outPath_ALFA):
@@ -720,15 +652,16 @@ def cleanSpecPlot(specW, specF, objID, imagePath, specName):
     ymin, ymax = ax.get_ybound()
 
     #set up pretty scaling
-    posterSizes = [24,24,20,20]
-    plt.title('Spectrum of object ' +objID, size=posterSizes[1])
+    #elementSizes = [20,24,20,20]
+    elementSizes = [20,36,24,24]
+    plt.title('Spectrum of object ' +objID, size=elementSizes[1])
 
     plt.xlim(min(specW-100), max(specW+100))
 
-    plt.xlabel(r'wavelength ($\AA$)', size=posterSizes[2])
-    plt.ylabel('normalized flux', size=posterSizes[2])
-    plt.xticks(fontsize=posterSizes[0])
-    plt.yticks(fontsize=posterSizes[0])
+    plt.xlabel(r'wavelength ($\AA$)', size=elementSizes[2])
+    plt.ylabel('normalized flux', size=elementSizes[2])
+    plt.xticks(fontsize=elementSizes[0])
+    plt.yticks(fontsize=elementSizes[0])
 
     #save
     plt.savefig( join(imagePath, specName+'_clean.png'),dpi=200 )
@@ -770,11 +703,33 @@ def runMultispec(fpath, skyFile=''):
     datapath, basename = split(fpath)
     fname, __ = splitext(basename)
     outPath_WRALF = join(datapath, 'WRALFoutput')
+    
+    #prepare for sky line adjustments if desired
+    if skyFile != '':
+        try:
+            print('\n*****Running a sky line correction. Displaying sky spectrum. ' \
+                    'Follow the prompts and measure a sky line.')
+            userW, restW, __ = promptLine(skyFile, 'sky')
+            deltaW = userW-restW
+        except: deltaW = 0
+    else: deltaW = 0
+    print('Sky line shift: ', round(deltaW,6), 'Angstroms' )
 
+
+    ########################################################
+    from astropy.io import fits
+    
     #get the name of the data's field from imhead
-    imheadArr = readFitsHeader(fpath)
-    fieldName = parseImheadArr(imheadArr, key='OBJECT')
 
+    hdul = fits.open(fpath)
+    header = hdul[0].header
+    
+    fieldName = header['OBJECT']
+    
+    numAxes = header['NAXIS']
+    
+    ########################################################
+    
     #DANGER: clear out old output files before writing anything
     outFile1 = join(outPath_WRALF, fieldName+'_globalData.txt')
     outFile2 = join(outPath_WRALF, fieldName+'_lineData.txt')
@@ -790,32 +745,43 @@ def runMultispec(fpath, skyFile=''):
     specPath = join(outPath_WRALF, fieldName+'_1dspectra')
     if not exists(specPath):
         makedirs(specPath)
-
-    #prepare for sky line adjustments if desired
-    if skyFile != '':
-        try:
-            print('\n*****Running a sky line correction. Displaying sky spectrum. ' \
-                    'Follow the prompts and measure a sky line.')
-            userW, restW, __ = promptLine(skyFile, 'sky')
-            deltaW = userW-restW
-        except: deltaW = 0
-    else: deltaW = 0
-    print('Sky line shift: ', round(deltaW,6), 'Angstroms' )
-
-    ##Access spectrum and begin processing.
-
-    apIDs = parseImheadArr(imheadArr, key='APID')
-    apNums = parseImheadArr(imheadArr, key='APNUM')
-    apFlags = np.array( parseImheadArr(imheadArr, key='APNUM', col=3), dtype=bool)
-    
-    if (len(apNums) == 1) or (isinstance(apNums,str)):      #if only 1 aperture number, it's a 1D spectrum
-        objDF, lineDF = run1Dspec(fpath, deltaW=deltaW)
+        
+    ##Process as a one-dimensional spectrum if there's only one spectrum.
+    if numAxes == 1:
+        objID = fieldName
+        objDF, lineDF = run1Dspec(fpath, objID, fieldName, deltaW)
         return objDF, lineDF
 
-    #otherwise, process as a multispec file
+    ##Otherwise, process as a two-dimensional spectrum.
+    
+    #assumes that the 2D spectrum shape is [number of spectra, wavelength]
+    #so that 1st dimension is # of pixels, and 2nd is # of spectra
+    numSpec = header['NAXIS2']
+    
+    apIDs = np.empty(numSpec,dtype=object)
+    apNums = np.empty(numSpec,dtype=object)
+    apFlags = np.empty(numSpec)
+    for i in range(1,numSpec+1):
+        
+        curApIDKey = 'APID' +str(i)
+        curApNumKey = 'APNUM' +str(i)
+        
+        curApIDstr = header[curApIDKey]
+        curApNumstr = header[curApNumKey]
+        
+        curApID = curApIDstr.split()[0]
+        curApNum = curApNumstr.split()[0]
+        curApFlag = curApNumstr.split()[1]
+        
+        apIDs[i-1] = curApID
+        apNums[i-1] = curApNum
+        apFlags[i-1] = curApFlag
+    
+    #change the aperture flags to a boolean array
+    apFlags = apFlags.astype(bool)
 
     #sort all the Imhead keys according to ascending aperture number; this is the
-    #right way to handle a disordered Imheader _only_ if the multispec has correct ordering
+    #right way to handle a disordered Imheader _iff_ the multispec has correct ordering
     apNums = list(map(int, apNums))       #first, convert apNums to ints
     keys = list(zip(apNums, apIDs, apFlags))
     keys.sort()         #sorts along the first entry, the aperture number
@@ -824,8 +790,6 @@ def runMultispec(fpath, skyFile=''):
     apFlags = np.array( [z for x,y,z in keys], dtype=bool)
     #again, this sorting will only work downstream _iff_ the multispec has correct ordering.
     #Otherwise, we will have big, unseen problems.
-
-#    import pdb; pdb.set_trace()
 
     goodNums = apNums[apFlags]
     goodNames = apIDs[apFlags]
@@ -848,9 +812,7 @@ def runMultispec(fpath, skyFile=''):
         break
 
     for i in range(startSpec-1, nSpec):
-#        for i in range(nSpec):
-#        for i in range(39, 42):
-
+    
         ##Run scopy to make a file for the current spectrum.
 
         objID = goodNames[i]
@@ -872,7 +834,6 @@ def runMultispec(fpath, skyFile=''):
 #        iraf.scopy(input=fpath, output=specFile, apertures=curAp, clobber='yes')
         iraf.scopy(input=fpath, output=scopyFile, apertures=curAp, format='onedspec', clobber='yes')
         #and can then use the specFile var as before -- though this may be redundant
-
 
         #need to pause to let the file write
         sleep(1)
@@ -906,5 +867,3 @@ objDF, lineDF = runMultispec(fpath, skyFile)
 
 
 #fpath2 = '/home/bscousin/iraf/Team_SFACT/hadot055A/hadot055A_1dspectra/1dspec.0003.fits'
-
-
